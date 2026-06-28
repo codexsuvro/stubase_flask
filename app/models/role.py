@@ -15,3 +15,8 @@ class Role(UUIDMixin, BaseModel):
         back_populates='role', 
         lazy='selectin'
     )
+    
+    def __repr__(self):
+        return (
+            f"<Role {self.role_name}>"
+        )

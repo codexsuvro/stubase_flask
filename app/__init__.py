@@ -6,13 +6,18 @@ from app.extensions import (
     cors,
     api,
 )
-from app import models
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    
     db.init_app(app)
+    
+    from app import models
+    
     migrate.init_app(app, db)
     cors.init_app(app)
     api.init_app(app)
+    
+        
     return app
