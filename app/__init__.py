@@ -5,7 +5,9 @@ from app.extensions import (
     migrate,
     cors,
     api,
+    jwt,
 )
+from app.seeds.seed import seed
 
 def create_app():
     app = Flask(__name__)
@@ -18,6 +20,7 @@ def create_app():
     migrate.init_app(app, db)
     cors.init_app(app)
     api.init_app(app)
+    jwt.init_app(app)
     
-        
+    app.cli.add_command(seed)
     return app
