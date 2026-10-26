@@ -22,5 +22,8 @@ def create_app():
     api.init_app(app)
     jwt.init_app(app)
     
+    from app.auth.routes import blp as auth_blueprint
+    api.register_blueprint(auth_blueprint)
+    
     app.cli.add_command(seed)
     return app
