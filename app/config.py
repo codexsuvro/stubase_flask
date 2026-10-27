@@ -23,6 +23,9 @@ class Config:
             }
         }
     }
+    OPENAPI_SWAGGER_UI_CONFIG = {
+        "defaultModelsExpandDepth": -1,
+    }
     JWT_ACCESS_TOKEN_EXPIRES=timedelta(minutes=15)
     JWT_REFRESH_TOKEN_EXPIRES=timedelta(days=7)
     JWT_TOKEN_LOCATION=["headers"]

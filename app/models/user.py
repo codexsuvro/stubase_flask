@@ -44,6 +44,13 @@ class User(UUIDMixin, BaseModel):
         db.ForeignKey("roles.id"),
         nullable=False,
     )
+    
+    token_version = db.Column(
+        db.Integer,
+        default=0,
+        nullable=False,
+        server_default="0",
+    )
 
     role = db.relationship(
         'Role', 

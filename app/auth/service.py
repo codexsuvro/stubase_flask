@@ -34,11 +34,15 @@ def login_user(email: str, password: str) -> dict:
         identity=str(user.id),
         additional_claims={
             "role": user.role.role_name,
+            "token_version": user.token_version,
         },
     )
 
     refresh_token = create_refresh_token(
         identity=str(user.id),
+        additional_claims={
+            "token_version": user.token_version,
+        },
     )
 
     user.last_login = datetime.now(UTC)

@@ -138,3 +138,55 @@ class ErrorResponseSchema(Schema):
         metadata={"example": "Invalid email or password."},
     )
 
+class LogoutSchema(Schema):
+    refresh_token = fields.String(
+        required=True,
+        metadata={
+            "description": "The refresh token issued during login.",
+            "example": "eyJhfjsbsjdsjndjd..."
+        },
+    )
+    
+class LogoutResponseSchema(Schema):
+    message = fields.String(
+        required=True,
+        metadata={"example": "Logout successful."},
+    )
+    
+class ChangePasswordSchema(Schema):
+    current_password = fields.String(
+        required=True,
+        load_only=True,
+        metadata={
+            "description": "The current password of the user.",
+            "example": "AdminStubase@123",
+        }
+    )
+    new_password = fields.String(
+    required=True,
+    load_only=True,
+    validate=[
+        validate.Length(
+            min=12,
+            max=128,
+            error="Password must be between 12 and 128 characters.",
+        ),
+        validate.Regexp(
+            r"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$",
+            error=(
+                "Password must contain an uppercase letter, lowercase letter, "
+                "number, and special character."
+            ),
+        ),
+    ],
+    metadata={
+        "description": "The new password for the user.",
+        "example": "AdminStubase@1234",
+    }
+)
+    
+class ChangePasswordResponseSchema(Schema):
+    message = fields.String(
+        required=True,
+        metadata={"example": "Password changed successfully. Please login again."},
+    )
