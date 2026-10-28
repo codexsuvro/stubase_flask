@@ -15,9 +15,22 @@ class Department(UUIDMixin, BaseModel):
         nullable=False,
     )
 
-    hod_name = db.Column(
-        db.String(100),
-        nullable=False,
+    hod_faculty_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey(
+            "faculties.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        unique=True,
+    )
+
+    hod = db.relationship(
+        "Faculty",
+        foreign_keys=[hod_faculty_id],
+        back_populates="headed_department",
+        uselist=False,
+        post_update=True,
     )
 
     email = db.Column(
@@ -39,6 +52,7 @@ class Department(UUIDMixin, BaseModel):
     
     faculties = db.relationship(
         "Faculty",
+        foreign_keys="Faculty.department_id",
         back_populates="department",
         lazy="selectin",
     )

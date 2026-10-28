@@ -28,6 +28,7 @@ from app.extensions import db
 from app.models.token_blocklist import TokenBlocklist
 from app.utils.security import hash_password, check_password
 from sqlalchemy.exc import IntegrityError
+from app.auth.permissions import role_required
 
 
 blp = Blueprint(
@@ -268,3 +269,13 @@ class ChangePasswordResource(MethodView):
         return {
             "message": "Password changed successfully. Please login again."
         }
+
+@blp.route("/admin-check")
+class AdminCheckResource(MethodView):
+
+    @jwt_required()
+    @role_required("ADMIN")
+    def get(self):
+        return {
+            "message": "Admin access granted."
+        }, 200

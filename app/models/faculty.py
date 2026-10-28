@@ -53,6 +53,7 @@ class Faculty(UUIDMixin, BaseModel):
     
     department = db.relationship(
         "Department",
+        foreign_keys=[department_id],
         back_populates="faculties",
         lazy="selectin",
     )
@@ -67,6 +68,13 @@ class Faculty(UUIDMixin, BaseModel):
         "Course",
         back_populates="faculty",
         lazy="selectin",
+    )
+    
+    headed_department = db.relationship(
+        "Department",
+        foreign_keys="Department.hod_faculty_id",
+        back_populates="hod",
+        uselist=False,
     )
     
     def __repr__(self):

@@ -55,7 +55,12 @@ def create_app():
         return token_version != user.token_version
 
     from app.auth.routes import blp as auth_blueprint
+    from app.users.routes import blp as users_blueprint
+    from app.departments.routes import blp as departments_blueprint
+    
     api.register_blueprint(auth_blueprint)
+    api.register_blueprint(users_blueprint)
+    api.register_blueprint(departments_blueprint)
     
     app.cli.add_command(seed)
     
