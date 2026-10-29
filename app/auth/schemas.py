@@ -54,7 +54,7 @@ class TokenResponseSchema(Schema):
     )
 
 
-class UserResponseSchema(Schema):
+class AuthUserResponseSchema(Schema):
     id = fields.UUID(
         required=True,
         metadata={
@@ -95,7 +95,7 @@ class LoginResponseSchema(Schema):
     )
 
     user = fields.Nested(
-        UserResponseSchema,
+        AuthUserResponseSchema,
         required=True,
     )
 

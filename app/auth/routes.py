@@ -12,7 +12,7 @@ from flask import current_app
 from app.auth.schemas import (
     LoginSchema,
     LoginResponseSchema,
-    UserResponseSchema,
+    AuthUserResponseSchema,
     RefreshResponseSchema,
     ErrorResponseSchema,
     LogoutSchema,
@@ -74,7 +74,7 @@ class CurrentUserResource(MethodView):
         description="Returns the profile associated with the access token.",
         security=[{"bearerAuth": []}],
     )
-    @blp.response(200, UserResponseSchema)
+    @blp.response(200, AuthUserResponseSchema)
     @blp.alt_response(
         401,
         schema=ErrorResponseSchema,

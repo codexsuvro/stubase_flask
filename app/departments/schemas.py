@@ -26,11 +26,26 @@ class DepartmentCreateSchema(Schema):
         metadata={"example": "9876543210"},
     )
 
+class FacultySummarySchema(Schema):
+    id = fields.UUID(dump_only=True)
+    faculty_id = fields.String(dump_only=True)
+    first_name = fields.String(dump_only=True)
+    last_name = fields.String(dump_only=True)
+    designation = fields.String(dump_only=True)
+    email = fields.Email(dump_only=True)
+
 
 class DepartmentResponseSchema(Schema):
     id = fields.UUID(dump_only=True)
     department_code = fields.String(dump_only=True)
     department_name = fields.String(dump_only=True)
+
+    hod = fields.Nested(
+        FacultySummarySchema,
+        attribute="hod",
+        allow_none=True,
+        dump_only=True,
+    )
     hod_faculty_id = fields.UUID(allow_none=True, dump_only=True)
     email = fields.Email(dump_only=True)
     phone = fields.String(dump_only=True)
