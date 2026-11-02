@@ -27,6 +27,7 @@ def create_app():
     
     from app.models.token_blocklist import TokenBlocklist
     from app.auth.repository import get_user_by_id
+    from app.models.attendance_audit import AttendanceAudit
     
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(jwt_header, jwt_payload):
@@ -59,12 +60,14 @@ def create_app():
     from app.departments.routes import blp as departments_blueprint
     from app.courses.routes import blp as courses_blueprint
     from app.enrollments.routes import blp as enrollments_blueprint
+    from app.attendance.routes import blp as attendance_blueprint
     
     api.register_blueprint(auth_blueprint)
     api.register_blueprint(users_blueprint)
     api.register_blueprint(departments_blueprint)
     api.register_blueprint(courses_blueprint)
     api.register_blueprint(enrollments_blueprint)
+    api.register_blueprint(attendance_blueprint)
     
     app.cli.add_command(seed)
     
