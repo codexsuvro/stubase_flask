@@ -17,6 +17,7 @@ from app.attendance.repository import (
     list_attendance_audits,
     save_attendance_update,
 )
+from app.models.student import Student
 
 
 class EnrollmentNotFoundError(Exception):
@@ -74,6 +75,131 @@ def ensure_enrollment_access(enrollment, user_id):
         raise AttendancePermissionError(
             "You can only access attendance for your assigned courses."
         )
+
+def get_student_profile_for_user(user_id):
+    """
+    Resolve the Student profile belonging to the authenticated user.
+    """
+
+    user = db.session.get(User, UUID(str(user_id)))
+
+    if user is None:
+        raise AttendancePermissionError(
+            "Authenticated user was not found."
+        )
+
+    role_name = (
+        user.role.role_name.strip().upper()
+        if user.role and user.role.role_name
+        else None
+    )
+
+    if role_name != "STUDENT":
+        raise AttendancePermissionError(
+            "Only students can access this resource."
+        )
+
+    student_statement = select(Student).where(
+        Student.user_id == user.id
+    )
+
+    student = db.session.scalar(student_statement)
+
+    if student is None:
+        raise AttendancePermissionError(
+            "Student profile was not found for this account."
+        )
+
+    return student
+
+
+def get_student_attendance(user_id):
+    """
+    Return attendance records for all enrollments of the logged-in student.
+    """
+
+    student = get_student_profile_for_user(user_id)
+
+    statement = (
+        select(Attendance)
+        .join(Enrollment)
+        .where(Enrollment.student_id == student.id)
+        .order_by(
+            Attendance.attendance_date.desc(),
+            Attendance.created_at.desc(),
+        )
+    )
+
+    return db.session.scalars(statement).all()
+
+
+def get_student_attendance_summary(user_id):
+    """
+    Return attendance summary grouped by the student's enrollments.
+    """
+
+    student = get_student_profile_for_user(user_id)
+
+    statement = (
+        select(Enrollment)
+        .where(Enrollment.student_id == student.id)
+        .order_by(Enrollment.created_at.desc())
+    )
+
+    enrollments = db.session.scalars(statement).all()
+
+    summaries = []
+
+    for enrollment in enrollments:
+        summary = calculate_attendance_summary(enrollment.id)
+
+        summary["course_code"] = enrollment.course.course_code
+        summary["course_name"] = enrollment.course.course_name
+        summary["academic_year"] = enrollment.academic_year
+
+        summaries.append(summary)
+
+    return summaries
+
+
+def get_student_attendance_shortage(
+    user_id,
+    minimum_percentage=75.0,
+):
+    """
+    Return attendance shortage information for all student enrollments.
+    """
+
+    student = get_student_profile_for_user(user_id)
+
+    statement = (
+        select(Enrollment)
+        .where(Enrollment.student_id == student.id)
+        .order_by(Enrollment.created_at.desc())
+    )
+
+    enrollments = db.session.scalars(statement).all()
+
+    results = []
+
+    for enrollment in enrollments:
+        summary = calculate_attendance_summary(enrollment.id)
+        percentage = summary["attendance_percentage"]
+
+        results.append({
+            "enrollment_id": enrollment.id,
+            "course_code": enrollment.course.course_code,
+            "course_name": enrollment.course.course_name,
+            "attendance_percentage": percentage,
+            "minimum_required_percentage": minimum_percentage,
+            "shortage_detected": (
+                summary["total_classes"] > 0
+                and percentage < minimum_percentage
+            ),
+            "total_classes": summary["total_classes"],
+        })
+
+    return results
 
 
 def ensure_attendance_access(attendance, user_id):

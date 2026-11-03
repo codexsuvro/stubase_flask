@@ -8,6 +8,8 @@ from app.attendance.schemas import (
     AttendanceUpdateSchema,
     AttendanceAuditResponseSchema,
     AttendanceShortageSchema,
+    StudentAttendanceSummarySchema,
+    StudentAttendanceShortageSchema,
 )
 from app.attendance.repository import list_attendance
 from app.attendance.service import (
@@ -22,6 +24,9 @@ from app.attendance.service import (
     get_attendance_for_user,
     get_enrollment_attendance_for_user,
     get_attendance_summary_for_user,
+    get_student_attendance,
+    get_student_attendance_shortage,
+    get_student_attendance_summary,
 )
 
 from flask import request
@@ -238,5 +243,82 @@ class AttendanceShortageResource(MethodView):
             )
         except EnrollmentNotFoundError as exc:
             abort(404, message=str(exc))
+        except AttendancePermissionError as exc:
+            abort(403, message=str(exc))
+            
+            
+@blp.route("/my")
+class MyAttendanceResource(MethodView):
+
+    @blp.doc(
+        summary="Get my attendance",
+        description="Returns attendance records belonging to the authenticated student.",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.response(200, AttendanceResponseSchema(many=True))
+    @role_required("STUDENT")
+    def get(self):
+        try:
+            return get_student_attendance(
+                get_jwt_identity()
+            )
+        except AttendancePermissionError as exc:
+            abort(403, message=str(exc))
+
+
+@blp.route("/my/summary")
+class MyAttendanceSummaryResource(MethodView):
+
+    @blp.doc(
+        summary="Get my attendance summary",
+        description="Returns attendance summaries for all courses enrolled by the authenticated student.",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.response(200, StudentAttendanceSummarySchema(many=True))
+    @role_required("STUDENT")
+    def get(self):
+        try:
+            return get_student_attendance_summary(
+                get_jwt_identity()
+            )
+        except AttendancePermissionError as exc:
+            abort(403, message=str(exc))
+
+
+@blp.route("/my/shortage")
+class MyAttendanceShortageResource(MethodView):
+
+    @blp.doc(
+        summary="Check my attendance shortage",
+        description="Checks attendance shortage across all courses enrolled by the authenticated student.",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.response(200, StudentAttendanceShortageSchema(many=True))
+    @role_required("STUDENT")
+    def get(self):
+        try:
+            threshold = float(
+                request.args.get("minimum_percentage", 75)
+            )
+
+            if not 0 < threshold <= 100:
+                abort(
+                    422,
+                    message=(
+                        "minimum_percentage must be greater than 0 "
+                        "and at most 100."
+                    ),
+                )
+
+            return get_student_attendance_shortage(
+                user_id=get_jwt_identity(),
+                minimum_percentage=threshold,
+            )
+
+        except ValueError:
+            abort(
+                422,
+                message="minimum_percentage must be a valid number.",
+            )
         except AttendancePermissionError as exc:
             abort(403, message=str(exc))

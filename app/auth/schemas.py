@@ -19,7 +19,7 @@ class LoginSchema(Schema):
         load_only=True,
         metadata={
             "description": "The password associated with the account.",
-            "example": "Admin@123",
+            "example": "AdminStubase@123",
         },
         validate=validate.Length(min=1, error="Password is required."),
         error_messages={"required": "Password is required."},

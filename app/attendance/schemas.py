@@ -101,3 +101,27 @@ class AttendanceShortageSchema(Schema):
     minimum_required_percentage = fields.Float(dump_only=True)
     shortage_detected = fields.Boolean(dump_only=True)
     total_classes = fields.Integer(dump_only=True)
+    
+
+class StudentAttendanceSummarySchema(Schema):
+    enrollment_id = fields.UUID(dump_only=True)
+    course_code = fields.String(dump_only=True)
+    course_name = fields.String(dump_only=True)
+    academic_year = fields.String(dump_only=True)
+
+    total_classes = fields.Integer(dump_only=True)
+    present_count = fields.Integer(dump_only=True)
+    absent_count = fields.Integer(dump_only=True)
+    late_count = fields.Integer(dump_only=True)
+    attendance_percentage = fields.Float(dump_only=True)
+
+
+class StudentAttendanceShortageSchema(Schema):
+    enrollment_id = fields.UUID(dump_only=True)
+    course_code = fields.String(dump_only=True)
+    course_name = fields.String(dump_only=True)
+
+    attendance_percentage = fields.Float(dump_only=True)
+    minimum_required_percentage = fields.Float(dump_only=True)
+    shortage_detected = fields.Boolean(dump_only=True)
+    total_classes = fields.Integer(dump_only=True)
