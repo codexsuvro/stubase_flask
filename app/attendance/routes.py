@@ -10,8 +10,10 @@ from app.attendance.schemas import (
     AttendanceShortageSchema,
     StudentAttendanceSummarySchema,
     StudentAttendanceShortageSchema,
+    AttendancePaginatedResponseSchema,
+    AttendanceQuerySchema,
 )
-from app.attendance.repository import list_attendance
+from app.attendance.repository import list_attendance, list_attendance_paginated
 from app.attendance.service import (
     create_attendance,
     EnrollmentNotFoundError,
@@ -24,9 +26,9 @@ from app.attendance.service import (
     get_attendance_for_user,
     get_enrollment_attendance_for_user,
     get_attendance_summary_for_user,
-    get_student_attendance,
     get_student_attendance_shortage,
     get_student_attendance_summary,
+    get_student_attendance_paginated,
 )
 
 from flask import request
@@ -72,13 +74,26 @@ class AttendanceCollectionResource(MethodView):
 
     @blp.doc(
         summary="List all attendance records",
-        description="ADMIN only. Returns all recorded attendance.",
+        description=(
+            "ADMIN only. Returns paginated attendance records. "
+            "Supports filtering by student ID, status, course code "
+            "and attendance date."
+        ),
         security=[{"bearerAuth": []}],
     )
-    @blp.response(200, AttendanceResponseSchema(many=True))
+    @blp.arguments(AttendanceQuerySchema, location="query")
+    @blp.response(200, AttendancePaginatedResponseSchema)
     @role_required("ADMIN")
-    def get(self):
-        return list_attendance()
+    def get(self, query_args):
+        return list_attendance_paginated(
+            page=query_args["page"],
+            per_page=query_args["per_page"],
+            student_id=query_args.get("student_id"),
+            status=query_args.get("status"),
+            course_code=query_args.get("course_code"),
+            start_date=query_args.get("start_date"),
+            end_date=query_args.get("end_date"),
+        )
 
 
 @blp.route("/<uuid:attendance_id>")
@@ -252,15 +267,26 @@ class MyAttendanceResource(MethodView):
 
     @blp.doc(
         summary="Get my attendance",
-        description="Returns attendance records belonging to the authenticated student.",
+        description=(
+            "Returns paginated attendance records belonging to "
+            "the authenticated student. Supports filtering by "
+            "status, course code and attendance date."
+        ),
         security=[{"bearerAuth": []}],
     )
-    @blp.response(200, AttendanceResponseSchema(many=True))
+    @blp.arguments(AttendanceQuerySchema, location="query")
+    @blp.response(200, AttendancePaginatedResponseSchema)
     @role_required("STUDENT")
-    def get(self):
+    def get(self, query_args):
         try:
-            return get_student_attendance(
-                get_jwt_identity()
+            return get_student_attendance_paginated(
+                user_id=get_jwt_identity(),
+                page=query_args["page"],
+                per_page=query_args["per_page"],
+                status=query_args.get("status"),
+                course_code=query_args.get("course_code"),
+                start_date=query_args.get("start_date"),
+                end_date=query_args.get("end_date"),
             )
         except AttendancePermissionError as exc:
             abort(403, message=str(exc))

@@ -16,6 +16,7 @@ from app.attendance.repository import (
     list_attendance_by_enrollment,
     list_attendance_audits,
     save_attendance_update,
+    list_attendance_paginated,
 )
 from app.models.student import Student
 
@@ -402,3 +403,30 @@ def get_attendance_shortage(
         ),
         "total_classes": summary["total_classes"],
     }
+
+
+def get_student_attendance_paginated(
+    user_id,
+    page=1,
+    per_page=10,
+    status=None,
+    course_code=None,
+    start_date=None,
+    end_date=None,
+):
+    """
+    Return paginated attendance for the authenticated student.
+    """
+
+    student = get_student_profile_for_user(user_id)
+
+    return list_attendance_paginated(
+        page=page,
+        per_page=per_page,
+        student_id=student.id,
+        status=status,
+        course_code=course_code,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    

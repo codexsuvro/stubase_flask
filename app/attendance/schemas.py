@@ -125,3 +125,59 @@ class StudentAttendanceShortageSchema(Schema):
     minimum_required_percentage = fields.Float(dump_only=True)
     shortage_detected = fields.Boolean(dump_only=True)
     total_classes = fields.Integer(dump_only=True)
+    
+    
+class AttendancePaginationMetadataSchema(Schema):
+    page = fields.Integer(dump_only=True)
+    per_page = fields.Integer(dump_only=True)
+    total_records = fields.Integer(dump_only=True)
+    total_pages = fields.Integer(dump_only=True)
+    has_next = fields.Boolean(dump_only=True)
+    has_previous = fields.Boolean(dump_only=True)
+
+
+class AttendancePaginatedResponseSchema(Schema):
+    items = fields.List(
+        fields.Nested(AttendanceResponseSchema),
+        dump_only=True,
+    )
+    pagination = fields.Nested(
+        AttendancePaginationMetadataSchema,
+        dump_only=True,
+    )
+    
+
+class AttendanceQuerySchema(Schema):
+    page = fields.Integer(
+        load_default=1,
+        validate=validate.Range(min=1),
+    )
+
+    per_page = fields.Integer(
+        load_default=10,
+        validate=validate.Range(min=1, max=100),
+    )
+
+    status = fields.String(
+        required=False,
+        validate=validate.OneOf(["PRESENT", "ABSENT", "LATE"]),
+    )
+
+    course_code = fields.String(
+        required=False,
+        validate=validate.Length(min=1, max=20),
+    )
+
+    start_date = fields.Date(required=False)
+    end_date = fields.Date(required=False)
+    student_id = fields.UUID(required=False)
+
+    @validates_schema
+    def validate_date_range(self, data, **kwargs):
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+
+        if start_date and end_date and start_date > end_date:
+            raise ValidationError(
+                "start_date cannot be later than end_date."
+            )
