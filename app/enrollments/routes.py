@@ -4,11 +4,13 @@ from app.auth.permissions import role_required
 from app.enrollments.schemas import (
     EnrollmentCreateSchema,
     EnrollmentResponseSchema,
+    EnrollmentQuerySchema,
+    EnrollmentPaginatedResponseSchema,
 )
 from app.enrollments.repository import (
     get_enrollment_by_id,
-    list_enrollments,
     list_enrollments_by_student,
+    list_enrollments_paginated,
 )
 from app.enrollments.service import (
     create_enrollment,
@@ -64,10 +66,28 @@ class EnrollmentCollectionResource(MethodView):
         description="ADMIN only. Returns all student course enrollments.",
         security=[{"bearerAuth": []}],
     )
-    @blp.response(200, EnrollmentResponseSchema(many=True))
+    @blp.doc(
+        summary="List all enrollments",
+        description=(
+            "ADMIN only. Returns paginated student course enrollments. "
+            "Supports filtering by student, course, academic year, "
+            "semester and enrollment status."
+        ),
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(EnrollmentQuerySchema, location="query")
+    @blp.response(200, EnrollmentPaginatedResponseSchema)
     @role_required("ADMIN")
-    def get(self):
-        return list_enrollments()
+    def get(self, query_args):
+        return list_enrollments_paginated(
+            page=query_args["page"],
+            per_page=query_args["per_page"],
+            student_id=query_args.get("student_id"),
+            course_id=query_args.get("course_id"),
+            academic_year=query_args.get("academic_year"),
+            semester=query_args.get("semester"),
+            status=query_args.get("status"),
+        )
 
 
 @blp.route("/<uuid:enrollment_id>")
