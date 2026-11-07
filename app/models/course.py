@@ -58,6 +58,13 @@ class Course(UUIDMixin, BaseModel):
         cascade="all, delete-orphan",
     )
     
+    assessments = db.relationship(
+        "Assessment",
+        back_populates="course",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
+    
     def __repr__(self):
         return (
             f"<Course {self.course_code} "
