@@ -61,11 +61,7 @@ class EnrollmentCollectionResource(MethodView):
         except InvalidEnrollmentError as exc:
             abort(409, message=str(exc))
 
-    @blp.doc(
-        summary="List all enrollments",
-        description="ADMIN only. Returns all student course enrollments.",
-        security=[{"bearerAuth": []}],
-    )
+
     @blp.doc(
         summary="List all enrollments",
         description=(
