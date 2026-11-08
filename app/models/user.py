@@ -72,6 +72,13 @@ class User(UUIDMixin, BaseModel):
         lazy="selectin",
     )
     
+    graded_assessment_results = db.relationship(
+        "AssessmentResult",
+        back_populates="grader",
+        foreign_keys="AssessmentResult.graded_by",
+        lazy="selectin",
+    )
+    
     def __repr__(self):
         return (
             f"<User {self.username} "

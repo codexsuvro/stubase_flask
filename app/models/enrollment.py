@@ -61,6 +61,12 @@ class Enrollment(UUIDMixin, BaseModel):
         lazy="selectin",
         cascade="all, delete-orphan",
     )
+    
+    assessment_results = db.relationship(
+        "AssessmentResult",
+        back_populates="enrollment",
+        lazy="selectin",
+    )
 
     def __repr__(self):
         return (

@@ -74,6 +74,12 @@ class Assessment(UUIDMixin, BaseModel):
         back_populates="assessments",
         lazy="selectin",
     )
+    
+    results = db.relationship(
+        "AssessmentResult",
+        back_populates="assessment",
+        lazy="selectin",
+    )
 
     def __repr__(self):
         return (
