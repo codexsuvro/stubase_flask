@@ -4,6 +4,7 @@ from app.extensions import db
 from app.models.assessment import Assessment
 from app.models.enrollment import Enrollment
 from app.models.faculty import Faculty
+from app.models.student import Student
 from app.results.repository import (
     create_result as save_result,
     get_result_by_id,
@@ -45,8 +46,20 @@ def get_faculty_profile(actor_user_id):
     )
 
 
-def validate_course_access(course, actor_user_id, actor_role):
-    """ADMIN can access all courses; FACULTY only assigned courses."""
+def get_student_profile(actor_user_id):
+
+    return db.session.scalar(
+        db.select(Student).where(
+            Student.user_id == actor_user_id
+        )
+    )
+
+
+def validate_course_access(
+    course,
+    actor_user_id,
+    actor_role,
+):
 
     if actor_role == "ADMIN":
         return
@@ -64,7 +77,11 @@ def validate_course_access(course, actor_user_id, actor_role):
         )
 
 
-def validate_assessment_enrollment(assessment, enrollment):
+def validate_assessment_enrollment(
+    assessment,
+    enrollment,
+):
+
     if assessment.course_id != enrollment.course_id:
         raise InvalidAssessmentResultError(
             "The assessment and enrollment must belong to the same course."
@@ -113,7 +130,12 @@ def validate_marks(marks_obtained, max_marks):
     return marks
 
 
-def create_result(data, actor_user_id, actor_role):
+def create_result(
+    data,
+    actor_user_id,
+    actor_role,
+):
+
     assessment = db.session.get(
         Assessment,
         data["assessment_id"],
@@ -295,3 +317,24 @@ def list_results_for_user(
     )
 
 
+def list_my_results(
+    actor_user_id,
+    page=1,
+    per_page=10,
+    assessment_id=None,
+):
+
+    student = get_student_profile(actor_user_id)
+
+    if student is None:
+
+        raise AssessmentResultAccessDeniedError(
+            "Student profile was not found."
+        )
+
+    return list_results_paginated(
+        page=page,
+        per_page=per_page,
+        assessment_id=assessment_id,
+        student_id=student.id,
+    )

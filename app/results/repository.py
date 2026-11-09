@@ -17,19 +17,30 @@ def create_result(data):
 
 
 def get_result_by_id(result_id):
+
     stmt = (
         select(AssessmentResult)
         .options(
-            selectinload(AssessmentResult.assessment)
-            .selectinload(Assessment.course),
-            selectinload(AssessmentResult.enrollment)
-            .selectinload(Enrollment.student),
-            selectinload(AssessmentResult.grader),
+            selectinload(
+                AssessmentResult.assessment
+            ).selectinload(
+                Assessment.course
+            ),
+            selectinload(
+                AssessmentResult.enrollment
+            ).selectinload(
+                Enrollment.student
+            ),
+            selectinload(
+                AssessmentResult.grader
+            ),
         )
         .where(AssessmentResult.id == result_id)
     )
 
-    return db.session.execute(stmt).scalar_one_or_none()
+    return db.session.execute(
+        stmt
+    ).scalar_one_or_none()
 
 
 def get_result_by_assessment_and_enrollment(
@@ -41,10 +52,13 @@ def get_result_by_assessment_and_enrollment(
         AssessmentResult.enrollment_id == enrollment_id,
     )
 
-    return db.session.execute(stmt).scalar_one_or_none()
+    return db.session.execute(
+        stmt
+    ).scalar_one_or_none()
 
 
 def update_result(result, data):
+
     for key, value in data.items():
         setattr(result, key, value)
 
@@ -71,20 +85,39 @@ def list_results_paginated(
 ):
     stmt = (
         select(AssessmentResult)
-        .join(AssessmentResult.assessment)
-        .join(AssessmentResult.enrollment)
+        .join(
+            Assessment,
+            AssessmentResult.assessment_id == Assessment.id,
+        )
+        .join(
+            Enrollment,
+            AssessmentResult.enrollment_id == Enrollment.id,
+        )
         .options(
-            selectinload(AssessmentResult.assessment),
-            selectinload(AssessmentResult.enrollment)
-            .selectinload(Enrollment.student),
-            selectinload(AssessmentResult.grader),
+            selectinload(
+                AssessmentResult.assessment
+            ),
+            selectinload(
+                AssessmentResult.enrollment
+            ).selectinload(
+                Enrollment.student
+            ),
+            selectinload(
+                AssessmentResult.grader
+            ),
         )
     )
 
     count_stmt = (
         select(func.count(AssessmentResult.id))
-        .join(AssessmentResult.assessment)
-        .join(AssessmentResult.enrollment)
+        .join(
+            Assessment,
+            AssessmentResult.assessment_id == Assessment.id,
+        )
+        .join(
+            Enrollment,
+            AssessmentResult.enrollment_id == Enrollment.id,
+        )
     )
 
     if assessment_id is not None:
@@ -112,13 +145,23 @@ def list_results_paginated(
         )
 
     if faculty_id is not None:
-        stmt = stmt.join(Assessment.course).where(
-            Course.faculty_id == faculty_id
+
+        stmt = (
+            stmt
+            .join(
+                Course,
+                Assessment.course_id == Course.id,
+            )
+            .where(Course.faculty_id == faculty_id)
         )
-        count_stmt = count_stmt.join(
-            Assessment.course
-        ).where(
-            Course.faculty_id == faculty_id
+
+        count_stmt = (
+            count_stmt
+            .join(
+                Course,
+                Assessment.course_id == Course.id,
+            )
+            .where(Course.faculty_id == faculty_id)
         )
 
     if student_id is not None:
@@ -129,11 +172,14 @@ def list_results_paginated(
             Enrollment.student_id == student_id
         )
 
-    total = db.session.scalar(count_stmt)
+    total = db.session.scalar(count_stmt) or 0
 
     stmt = (
         stmt
-        .order_by(AssessmentResult.created_at.desc())
+        .order_by(
+            AssessmentResult.created_at.desc(),
+            AssessmentResult.id.desc(),
+        )
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
@@ -155,5 +201,3 @@ def commit():
 
 def rollback():
     db.session.rollback()
-
-

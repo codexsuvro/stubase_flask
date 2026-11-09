@@ -62,6 +62,7 @@ def create_app():
     from app.enrollments.routes import blp as enrollments_blueprint
     from app.attendance.routes import blp as attendance_blueprint
     from app.assessments.routes import blp as assessments_blueprint
+    from app.results.routes import blp as results_blueprint
     
     api.register_blueprint(auth_blueprint)
     api.register_blueprint(users_blueprint)
@@ -70,6 +71,7 @@ def create_app():
     api.register_blueprint(enrollments_blueprint)
     api.register_blueprint(attendance_blueprint)
     api.register_blueprint(assessments_blueprint)
+    api.register_blueprint(results_blueprint)
     
     app.cli.add_command(seed)
     

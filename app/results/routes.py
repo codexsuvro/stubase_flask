@@ -2,16 +2,20 @@ from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from flask_jwt_extended import get_jwt_identity
 from app.auth.permissions import role_required
+from app.auth.repository import get_user_by_id
 from app.results.schemas import (
     AssessmentResultCreateSchema,
     AssessmentResultUpdateSchema,
+    AssessmentResultQuerySchema,
     AssessmentResultResponseSchema,
+    AssessmentResultPaginatedResponseSchema,
 )
 from app.results.service import (
     create_result,
     update_result,
     get_result_for_user,
     list_results_for_user,
+    list_my_results,
     AssessmentNotFoundError,
     EnrollmentNotFoundError,
     AssessmentResultNotFoundError,
@@ -23,29 +27,47 @@ from app.results.service import (
 
 blp = Blueprint(
     "Assessment Results",
-    "results",
+    __name__,
     url_prefix="/results",
-    description="Assessment results management operations.",
+    description="Assessment results management.",
 )
 
 
-@blp.route("/")
-class AssessmentResultListResource(MethodView):
+def get_current_user_role():
 
+    user = get_user_by_id(get_jwt_identity())
+
+    if user is None or user.role is None:
+
+        abort(
+            401,
+            message="Authenticated user or role was not found.",
+        )
+
+    return user.role.role_name.strip().upper()
+
+
+@blp.route("")
+class AssessmentResultCollectionResource(MethodView):
+
+    @blp.doc(
+        summary="Create an assessment result",
+        description=(
+            "ADMIN can create results for all courses. "
+            "FACULTY can create results only for assigned courses."
+        ),
+        security=[{"bearerAuth": []}],
+    )
     @blp.arguments(AssessmentResultCreateSchema)
     @blp.response(201, AssessmentResultResponseSchema)
     @role_required("ADMIN", "FACULTY")
     def post(self, data):
-        """Create an assessment result."""
-
-        actor_user_id = get_jwt_identity()
-        actor_role = self.current_user.role.role_name
 
         try:
             return create_result(
-                data,
-                actor_user_id,
-                actor_role,
+                data=data,
+                actor_user_id=get_jwt_identity(),
+                actor_role=get_current_user_role(),
             )
 
         except AssessmentNotFoundError as exc:
@@ -54,51 +76,95 @@ class AssessmentResultListResource(MethodView):
         except EnrollmentNotFoundError as exc:
             abort(404, message=str(exc))
 
-        except InvalidAssessmentResultError as exc:
-            abort(422, message=str(exc))
-
         except DuplicateAssessmentResultError as exc:
             abort(409, message=str(exc))
+
+        except InvalidAssessmentResultError as exc:
+            abort(422, message=str(exc))
 
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))
 
-    @blp.response(200, AssessmentResultResponseSchema(many=True))
-    @role_required("ADMIN")
-    def get(self):
-        """List assessment results (ADMIN only)."""
 
-        actor_user_id = get_jwt_identity()
-        actor_role = self.current_user.role.role_name
+    @blp.doc(
+        summary="List assessment results",
+        description="ADMIN can view all assessment results with pagination and filters.",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(
+        AssessmentResultQuerySchema,
+        location="query",
+    )
+    @blp.response(
+        200,
+        AssessmentResultPaginatedResponseSchema,
+    )
+    @role_required("ADMIN")
+    def get(self, args):
 
         try:
-            result = list_results_for_user(
-                actor_user_id=actor_user_id,
-                actor_role=actor_role,
+
+            return list_results_for_user(
+                actor_user_id=get_jwt_identity(),
+                actor_role=get_current_user_role(),
+                **args,
             )
 
-            return result["items"]
+        except AssessmentResultAccessDeniedError as exc:
+            abort(403, message=str(exc))
+
+
+@blp.route("/my")
+class MyAssessmentResultsResource(MethodView):
+
+    @blp.doc(
+        summary="Get my assessment results",
+        description=(
+            "Students can view only their own assessment results. "
+            "The student profile is resolved from the authenticated user."
+        ),
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(
+        AssessmentResultQuerySchema,
+        location="query",
+    )
+    @blp.response(
+        200,
+        AssessmentResultPaginatedResponseSchema,
+    )
+    @role_required("STUDENT")
+    def get(self, args):
+
+        try:
+
+            return list_my_results(
+                actor_user_id=get_jwt_identity(),
+                page=args["page"],
+                per_page=args["per_page"],
+                assessment_id=args.get("assessment_id"),
+            )
 
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))
 
 
 @blp.route("/<uuid:result_id>")
-class AssessmentResultResource(MethodView):
+class AssessmentResultDetailResource(MethodView):
 
+    @blp.doc(
+        summary="Get assessment result by UUID",
+        security=[{"bearerAuth": []}],
+    )
     @blp.response(200, AssessmentResultResponseSchema)
     @role_required("ADMIN", "FACULTY")
     def get(self, result_id):
-        """Get an assessment result."""
-
-        actor_user_id = get_jwt_identity()
-        actor_role = self.current_user.role.role_name
 
         try:
             return get_result_for_user(
-                result_id,
-                actor_user_id,
-                actor_role,
+                result_id=result_id,
+                actor_user_id=get_jwt_identity(),
+                actor_role=get_current_user_role(),
             )
 
         except AssessmentResultNotFoundError as exc:
@@ -107,21 +173,22 @@ class AssessmentResultResource(MethodView):
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))
 
+
+    @blp.doc(
+        summary="Update assessment result",
+        security=[{"bearerAuth": []}],
+    )
     @blp.arguments(AssessmentResultUpdateSchema)
     @blp.response(200, AssessmentResultResponseSchema)
     @role_required("ADMIN", "FACULTY")
     def patch(self, data, result_id):
-        """Update an assessment result."""
-
-        actor_user_id = get_jwt_identity()
-        actor_role = self.current_user.role.role_name
 
         try:
             return update_result(
-                result_id,
-                data,
-                actor_user_id,
-                actor_role,
+                result_id=result_id,
+                data=data,
+                actor_user_id=get_jwt_identity(),
+                actor_role=get_current_user_role(),
             )
 
         except AssessmentResultNotFoundError as exc:
@@ -137,22 +204,31 @@ class AssessmentResultResource(MethodView):
 @blp.route("/assessment/<uuid:assessment_id>")
 class AssessmentResultByAssessmentResource(MethodView):
 
-    @blp.response(200, AssessmentResultResponseSchema(many=True))
+    @blp.doc(
+        summary="List results by assessment",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(
+        AssessmentResultQuerySchema,
+        location="query",
+    )
+    @blp.response(
+        200,
+        AssessmentResultPaginatedResponseSchema,
+    )
     @role_required("ADMIN", "FACULTY")
-    def get(self, assessment_id):
-        """Get results for an assessment."""
-
-        actor_user_id = get_jwt_identity()
-        actor_role = self.current_user.role.role_name
+    def get(self, args, assessment_id):
 
         try:
-            assessment_results = list_results_for_user(
-                actor_user_id=actor_user_id,
-                actor_role=actor_role,
-                assessment_id=assessment_id,
-            )
 
-            return assessment_results["items"]
+            return list_results_for_user(
+                actor_user_id=get_jwt_identity(),
+                actor_role=get_current_user_role(),
+                page=args["page"],
+                per_page=args["per_page"],
+                assessment_id=assessment_id,
+                course_id=args.get("course_id"),
+            )
 
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))
@@ -161,24 +237,31 @@ class AssessmentResultByAssessmentResource(MethodView):
 @blp.route("/enrollment/<uuid:enrollment_id>")
 class AssessmentResultByEnrollmentResource(MethodView):
 
-    @blp.response(200, AssessmentResultResponseSchema(many=True))
+    @blp.doc(
+        summary="List results by enrollment",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(
+        AssessmentResultQuerySchema,
+        location="query",
+    )
+    @blp.response(
+        200,
+        AssessmentResultPaginatedResponseSchema,
+    )
     @role_required("ADMIN", "FACULTY")
-    def get(self, enrollment_id):
-        """Get results for an enrollment."""
-
-        actor_user_id = get_jwt_identity()
-        actor_role = self.current_user.role.role_name
+    def get(self, args, enrollment_id):
 
         try:
-            assessment_results = list_results_for_user(
-                actor_user_id=actor_user_id,
-                actor_role=actor_role,
-                enrollment_id=enrollment_id,
-            )
 
-            return assessment_results["items"]
+            return list_results_for_user(
+                actor_user_id=get_jwt_identity(),
+                actor_role=get_current_user_role(),
+                page=args["page"],
+                per_page=args["per_page"],
+                enrollment_id=enrollment_id,
+                course_id=args.get("course_id"),
+            )
 
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))
-
-
