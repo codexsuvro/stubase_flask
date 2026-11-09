@@ -9,6 +9,7 @@ from app.results.schemas import (
     AssessmentResultQuerySchema,
     AssessmentResultResponseSchema,
     AssessmentResultPaginatedResponseSchema,
+    AssessmentAnalyticsResponseSchema,
 )
 from app.results.service import (
     create_result,
@@ -22,6 +23,9 @@ from app.results.service import (
     InvalidAssessmentResultError,
     DuplicateAssessmentResultError,
     AssessmentResultAccessDeniedError,
+    get_my_result_analytics,
+    get_course_result_analytics,
+    get_assessment_result_analytics,
 )
 
 
@@ -265,3 +269,74 @@ class AssessmentResultByEnrollmentResource(MethodView):
 
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))
+            
+            
+@blp.route("/analytics/my")
+class MyResultAnalyticsResource(MethodView):
+
+    @blp.doc(
+        summary="Get my academic performance analytics",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.response(200, AssessmentAnalyticsResponseSchema)
+    @role_required("STUDENT")
+    def get(self):
+
+        try:
+            return get_my_result_analytics(
+                actor_user_id=get_jwt_identity(),
+            )
+
+        except AssessmentResultAccessDeniedError as exc:
+            abort(403, message=str(exc))
+
+
+@blp.route("/analytics/course/<uuid:course_id>")
+class CourseResultAnalyticsResource(MethodView):
+
+    @blp.doc(
+        summary="Get course result analytics",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.response(200, AssessmentAnalyticsResponseSchema)
+    @role_required("ADMIN", "FACULTY")
+    def get(self, course_id):
+
+        try:
+            return get_course_result_analytics(
+                course_id=course_id,
+                actor_user_id=get_jwt_identity(),
+                actor_role=get_current_user_role(),
+            )
+
+        except AssessmentNotFoundError as exc:
+            abort(404, message=str(exc))
+
+        except AssessmentResultAccessDeniedError as exc:
+            abort(403, message=str(exc))
+
+
+@blp.route("/analytics/assessment/<uuid:assessment_id>")
+class AssessmentResultAnalyticsResource(MethodView):
+
+    @blp.doc(
+        summary="Get assessment result analytics",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.response(200, AssessmentAnalyticsResponseSchema)
+    @role_required("ADMIN", "FACULTY")
+    def get(self, assessment_id):
+
+        try:
+            return get_assessment_result_analytics(
+                assessment_id=assessment_id,
+                actor_user_id=get_jwt_identity(),
+                actor_role=get_current_user_role(),
+            )
+
+        except AssessmentNotFoundError as exc:
+            abort(404, message=str(exc))
+
+        except AssessmentResultAccessDeniedError as exc:
+            abort(403, message=str(exc))
+

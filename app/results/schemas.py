@@ -72,11 +72,72 @@ class AssessmentResultQuerySchema(Schema):
     course_id = fields.UUID(required=False)
 
 
+# -------------------------------
+# Nested Response Schemas
+# -------------------------------
+
+class ResultCourseSchema(Schema):
+
+    id = fields.UUID()
+    course_code = fields.String()
+    course_name = fields.String()
+    credits = fields.Integer()
+    semester = fields.Integer()
+
+
+class ResultAssessmentSchema(Schema):
+
+    id = fields.UUID()
+    assessment_name = fields.String()
+    assessment_type = fields.String()
+    sequence_number = fields.Integer()
+    academic_year = fields.String()
+    semester = fields.Integer()
+    max_marks = fields.Decimal(as_string=True, places=2)
+    passing_marks = fields.Decimal(as_string=True, places=2)
+    assessment_date = fields.Date()
+
+    course = fields.Nested(ResultCourseSchema)
+
+
+class ResultStudentSchema(Schema):
+
+    id = fields.UUID()
+    student_id = fields.String()
+    first_name = fields.String()
+    last_name = fields.String()
+
+
+class ResultEnrollmentSchema(Schema):
+
+    id = fields.UUID()
+    academic_year = fields.String()
+    semester = fields.Integer()
+    status = fields.String()
+
+    student = fields.Nested(ResultStudentSchema)
+
+
+# -------------------------------
+# Main Result Response
+# -------------------------------
+
 class AssessmentResultResponseSchema(Schema):
 
     id = fields.UUID(dump_only=True)
+
     assessment_id = fields.UUID()
     enrollment_id = fields.UUID()
+
+    assessment = fields.Nested(
+        ResultAssessmentSchema,
+        dump_only=True,
+    )
+
+    enrollment = fields.Nested(
+        ResultEnrollmentSchema,
+        dump_only=True,
+    )
 
     marks_obtained = fields.Decimal(
         as_string=True,
@@ -85,6 +146,7 @@ class AssessmentResultResponseSchema(Schema):
 
     remarks = fields.String(allow_none=True)
     graded_by = fields.UUID()
+
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
 
@@ -99,5 +161,42 @@ class AssessmentResultPaginatedResponseSchema(Schema):
     page = fields.Integer()
     per_page = fields.Integer()
     pages = fields.Integer()
-    
-    
+
+
+class AssessmentAnalyticsResponseSchema(Schema):
+
+    total_assessments = fields.Integer()
+    total_students = fields.Integer()
+
+    total_marks_obtained = fields.Decimal(
+        as_string=True,
+        places=2,
+    )
+
+    total_max_marks = fields.Decimal(
+        as_string=True,
+        places=2,
+    )
+
+    percentage = fields.Decimal(
+        as_string=True,
+        places=2,
+    )
+
+    average_marks = fields.Decimal(
+        as_string=True,
+        places=2,
+    )
+
+    highest_marks = fields.Decimal(
+        as_string=True,
+        places=2,
+    )
+
+    lowest_marks = fields.Decimal(
+        as_string=True,
+        places=2,
+    )
+
+    passed = fields.Integer()
+    failed = fields.Integer()

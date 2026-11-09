@@ -11,6 +11,9 @@ from app.results.repository import (
     get_result_by_assessment_and_enrollment,
     update_result as save_result_changes,
     list_results_paginated,
+    get_student_analytics,
+    get_course_analytics,
+    get_assessment_analytics,
 )
 
 
@@ -338,3 +341,99 @@ def list_my_results(
         assessment_id=assessment_id,
         student_id=student.id,
     )
+    
+
+def format_analytics(data):
+    total = data["total_results"] if "total_results" in data else data["total_assessments"]
+
+    total_marks = Decimal(str(data["total_marks_obtained"] or 0))
+    total_max = Decimal(str(data.get("total_max_marks", 0) or 0))
+
+    percentage = (
+        (total_marks / total_max) * Decimal("100")
+        if total_max > 0
+        else Decimal("0")
+    )
+
+    return {
+        "total_assessments": total,
+        "total_students": data.get("total_students", 1 if total else 0),
+        "total_marks_obtained": total_marks.quantize(Decimal("0.01")),
+        "total_max_marks": total_max.quantize(Decimal("0.01")),
+        "percentage": percentage.quantize(Decimal("0.01")),
+        "average_marks": Decimal(
+            str(data["average_marks"] or 0)
+        ).quantize(Decimal("0.01")),
+        "highest_marks": Decimal(
+            str(data["highest_marks"] or 0)
+        ).quantize(Decimal("0.01")),
+        "lowest_marks": Decimal(
+            str(data["lowest_marks"] or 0)
+        ).quantize(Decimal("0.01")),
+        "passed": data["passed"] or 0,
+        "failed": data["failed"] or 0,
+    }
+
+
+def get_my_result_analytics(actor_user_id):
+    student = get_student_profile(actor_user_id)
+
+    if student is None:
+        raise AssessmentResultAccessDeniedError(
+            "Student profile was not found."
+        )
+
+    data = get_student_analytics(student.id)
+
+    return format_analytics(data)
+
+
+def get_course_result_analytics(
+    course_id,
+    actor_user_id,
+    actor_role,
+):
+    from app.models.course import Course
+
+    course = db.session.get(Course, course_id)
+
+    if course is None:
+        raise AssessmentNotFoundError(
+            "Course not found."
+        )
+
+    validate_course_access(
+        course,
+        actor_user_id,
+        actor_role,
+    )
+
+    data = get_course_analytics(course_id)
+
+    return format_analytics(data)
+
+
+def get_assessment_result_analytics(
+    assessment_id,
+    actor_user_id,
+    actor_role,
+):
+    assessment = db.session.get(
+        Assessment,
+        assessment_id,
+    )
+
+    if assessment is None:
+        raise AssessmentNotFoundError(
+            "Assessment not found."
+        )
+
+    validate_course_access(
+        assessment.course,
+        actor_user_id,
+        actor_role,
+    )
+
+    data = get_assessment_analytics(assessment_id)
+
+    return format_analytics(data)

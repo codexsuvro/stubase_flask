@@ -1,4 +1,4 @@
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models.assessment_result import AssessmentResult
@@ -96,6 +96,8 @@ def list_results_paginated(
         .options(
             selectinload(
                 AssessmentResult.assessment
+            ).selectinload(
+                Assessment.course
             ),
             selectinload(
                 AssessmentResult.enrollment
@@ -145,7 +147,6 @@ def list_results_paginated(
         )
 
     if faculty_id is not None:
-
         stmt = (
             stmt
             .join(
@@ -201,3 +202,179 @@ def commit():
 
 def rollback():
     db.session.rollback()
+    
+
+def get_student_analytics(student_id):
+    stmt = (
+        select(
+            func.count(AssessmentResult.id).label("total_assessments"),
+            func.coalesce(
+                func.sum(AssessmentResult.marks_obtained), 0
+            ).label("total_marks_obtained"),
+            func.coalesce(
+                func.sum(Assessment.max_marks), 0
+            ).label("total_max_marks"),
+            func.coalesce(
+                func.avg(AssessmentResult.marks_obtained), 0
+            ).label("average_marks"),
+            func.coalesce(
+                func.max(AssessmentResult.marks_obtained), 0
+            ).label("highest_marks"),
+            func.coalesce(
+                func.min(AssessmentResult.marks_obtained), 0
+            ).label("lowest_marks"),
+            func.sum(
+                case(
+                    (
+                        AssessmentResult.marks_obtained
+                        >= Assessment.passing_marks,
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("passed"),
+            func.sum(
+                case(
+                    (
+                        AssessmentResult.marks_obtained
+                        < Assessment.passing_marks,
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("failed"),
+        )
+        .join(
+            Assessment,
+            AssessmentResult.assessment_id == Assessment.id,
+        )
+        .join(
+            Enrollment,
+            AssessmentResult.enrollment_id == Enrollment.id,
+        )
+        .where(Enrollment.student_id == student_id)
+    )
+
+    return db.session.execute(stmt).mappings().one()
+
+
+def get_course_analytics(course_id):
+    stmt = (
+        select(
+            func.count(AssessmentResult.id).label("total_results"),
+            func.count(
+                func.distinct(Enrollment.student_id)
+            ).label("total_students"),
+            func.coalesce(
+                func.sum(AssessmentResult.marks_obtained), 0
+            ).label("total_marks_obtained"),
+            func.coalesce(
+                func.sum(Assessment.max_marks), 0
+            ).label("total_max_marks"),
+            func.coalesce(
+                func.avg(AssessmentResult.marks_obtained), 0
+            ).label("average_marks"),
+            func.coalesce(
+                func.max(AssessmentResult.marks_obtained), 0
+            ).label("highest_marks"),
+            func.coalesce(
+                func.min(AssessmentResult.marks_obtained), 0
+            ).label("lowest_marks"),
+            func.sum(
+                case(
+                    (
+                        AssessmentResult.marks_obtained
+                        >= Assessment.passing_marks,
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("passed"),
+            func.sum(
+                case(
+                    (
+                        AssessmentResult.marks_obtained
+                        < Assessment.passing_marks,
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("failed"),
+        )
+        .join(
+            Assessment,
+            AssessmentResult.assessment_id == Assessment.id,
+        )
+        .join(
+            Enrollment,
+            AssessmentResult.enrollment_id == Enrollment.id,
+        )
+        .where(Assessment.course_id == course_id)
+    )
+
+    return db.session.execute(stmt).mappings().one()
+
+
+def get_assessment_analytics(assessment_id):
+    stmt = (
+        select(
+            func.count(AssessmentResult.id).label("total_results"),
+
+            func.count(
+                func.distinct(Enrollment.student_id)
+            ).label("total_students"),
+
+            func.coalesce(
+                func.sum(AssessmentResult.marks_obtained), 0
+            ).label("total_marks_obtained"),
+
+            func.coalesce(
+                func.sum(Assessment.max_marks), 0
+            ).label("total_max_marks"),
+
+            func.coalesce(
+                func.avg(AssessmentResult.marks_obtained), 0
+            ).label("average_marks"),
+
+            func.coalesce(
+                func.max(AssessmentResult.marks_obtained), 0
+            ).label("highest_marks"),
+
+            func.coalesce(
+                func.min(AssessmentResult.marks_obtained), 0
+            ).label("lowest_marks"),
+
+            func.sum(
+                case(
+                    (
+                        AssessmentResult.marks_obtained
+                        >= Assessment.passing_marks,
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("passed"),
+
+            func.sum(
+                case(
+                    (
+                        AssessmentResult.marks_obtained
+                        < Assessment.passing_marks,
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("failed"),
+        )
+        .join(
+            Assessment,
+            AssessmentResult.assessment_id == Assessment.id,
+        )
+        .join(
+            Enrollment,
+            AssessmentResult.enrollment_id == Enrollment.id,
+        )
+        .where(AssessmentResult.assessment_id == assessment_id)
+    )
+
+    return db.session.execute(stmt).mappings().one()
