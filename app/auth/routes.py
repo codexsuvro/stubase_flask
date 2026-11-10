@@ -102,27 +102,47 @@ class CurrentUserResource(MethodView):
 class RefreshTokenResource(MethodView):
     @jwt_required(refresh=True)
     @blp.doc(
-        summary="Refresh access token",
-        description="Uses a valid refresh token to issue a new access token.",
+        summary="Rotate authentication tokens",
+        description=(
+            "Uses the current refresh token to issue a new access token "
+            "and refresh token. The old refresh token is immediately revoked."
+        ),
         security=[{"bearerAuth": []}],
     )
     @blp.response(200, RefreshResponseSchema)
     @blp.alt_response(
         401,
         schema=ErrorResponseSchema,
-        description="Refresh token is missing, invalid, expired, or the user is unavailable.",
+        description=(
+            "Refresh token is missing, invalid, expired, revoked, "
+            "or the user is unavailable."
+        ),
     )
     def post(self):
-        """Generate a new access token using a refresh token."""
+        """Rotate the refresh token and issue a new token pair."""
+
         user_id = get_jwt_identity()
+        old_refresh_claims = get_jwt()
         user = get_user_by_id(user_id)
 
         if user is None or not user.is_active or not user.is_verified:
             abort(401, message="User is unavailable or not authorized.")
 
-        access_expires = current_app.config["JWT_ACCESS_TOKEN_EXPIRES"]
-        expires_in = int(access_expires.total_seconds())
+        now = datetime.now(UTC)
 
+        # Revoke the refresh token used for this request.
+        old_refresh_block = TokenBlocklist(
+            jti=old_refresh_claims["jti"],
+            token_type="refresh",
+            user_id=user.id,
+            expires_at=datetime.fromtimestamp(
+                old_refresh_claims["exp"],
+                tz=UTC,
+            ),
+            revoked_at=now,
+        )
+
+        # Generate a new access token.
         access_token = create_access_token(
             identity=str(user.id),
             additional_claims={
@@ -131,8 +151,38 @@ class RefreshTokenResource(MethodView):
             },
         )
 
+        # Generate a replacement refresh token.
+        from flask_jwt_extended import create_refresh_token
+
+        refresh_token = create_refresh_token(
+            identity=str(user.id),
+            additional_claims={
+                "token_version": user.token_version,
+            },
+        )
+
+        access_expires = current_app.config["JWT_ACCESS_TOKEN_EXPIRES"]
+
+        expires_in = int(access_expires.total_seconds())
+
+        try:
+            db.session.add(old_refresh_block)
+            db.session.commit()
+
+        except IntegrityError:
+            db.session.rollback()
+            abort(
+                401,
+                message="Refresh token has already been used or revoked.",
+            )
+
+        except Exception:
+            db.session.rollback()
+            raise
+
         return {
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "Bearer",
             "expires_in": expires_in,
         }

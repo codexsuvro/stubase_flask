@@ -125,6 +125,24 @@ class UserCreateSchema(Schema):
                 })
 
 
+class UserStatusUpdateSchema(Schema):
+    is_active = fields.Boolean(
+        required=True,
+        metadata={
+            "description": "Set true to activate or false to deactivate the account."
+        },
+    )
+
+
+class UserVerificationUpdateSchema(Schema):
+    is_verified = fields.Boolean(
+        required=True,
+        metadata={
+            "description": "Set true to verify or false to unverify the account."
+        },
+    )
+
+
 class UserResponseSchema(Schema):
     id = fields.UUID(dump_only=True)
     username = fields.String(dump_only=True)

@@ -109,8 +109,16 @@ class RefreshResponseSchema(Schema):
     access_token = fields.String(
         required=True,
         metadata={
-            "description": "New access token. Use it as a Bearer token.",
+            "description": "New short-lived access token.",
             "example": "<new-access-token>",
+        },
+    )
+
+    refresh_token = fields.String(
+        required=True,
+        metadata={
+            "description": "New refresh token. The previous refresh token is revoked.",
+            "example": "<new-refresh-token>",
         },
     )
 
