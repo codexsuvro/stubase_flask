@@ -64,6 +64,7 @@ def create_app():
     from app.assessments.routes import blp as assessments_blueprint
     from app.results.routes import blp as results_blueprint
     from app.dashboard.routes import blp as dashboard_blueprint
+    from app.academic_calendar.routes import blp as academic_calendar_blueprint
     
     api.register_blueprint(auth_blueprint)
     api.register_blueprint(users_blueprint)
@@ -74,6 +75,7 @@ def create_app():
     api.register_blueprint(assessments_blueprint)
     api.register_blueprint(results_blueprint)
     api.register_blueprint(dashboard_blueprint)
+    api.register_blueprint(academic_calendar_blueprint)
     
     app.cli.add_command(seed)
     

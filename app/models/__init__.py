@@ -9,3 +9,5 @@ from app.models.attendance import Attendance
 from app.models.token_blocklist import TokenBlocklist
 from app.models.assessment import Assessment
 from app.models.assessment_result import AssessmentResult
+from app.models.academic_year import AcademicYear
+from app.models.semester import Semester
