@@ -16,7 +16,7 @@ from app.assessments.service import (
     get_assessment_for_user,
     list_assessments_for_user,
     AssessmentNotFoundError,
-    CourseNotFoundError,
+    OfferingNotFoundError,
     InvalidAssessmentError,
     DuplicateAssessmentError,
     AssessmentAccessDeniedError,
@@ -32,12 +32,16 @@ blp = Blueprint(
 
 
 def get_current_user_role():
-    """Get the authenticated user's current database role."""
 
-    user = get_user_by_id(get_jwt_identity())
+    user = get_user_by_id(
+        get_jwt_identity()
+    )
 
     if user is None or user.role is None:
-        abort(401, message="Authenticated user or role was not found.")
+        abort(
+            401,
+            message="Authenticated user or role was not found.",
+        )
 
     return user.role.role_name.strip().upper()
 
@@ -48,8 +52,10 @@ class AssessmentCollectionResource(MethodView):
     @blp.doc(
         summary="Create an assessment",
         description=(
-            "ADMIN can create assessments for all courses. "
-            "FACULTY can create assessments only for assigned courses."
+            "ADMIN can create assessments for all course offerings. "
+            "FACULTY can create assessments only for assigned offerings. "
+            "The offering must be OPEN and its semester and academic year "
+            "must be ACTIVE."
         ),
         security=[{"bearerAuth": []}],
     )
@@ -65,7 +71,7 @@ class AssessmentCollectionResource(MethodView):
                 actor_role=get_current_user_role(),
             )
 
-        except CourseNotFoundError as exc:
+        except OfferingNotFoundError as exc:
             abort(404, message=str(exc))
 
         except DuplicateAssessmentError as exc:
@@ -82,14 +88,20 @@ class AssessmentCollectionResource(MethodView):
         summary="List assessments",
         description=(
             "Returns paginated assessments. ADMIN can view all assessments. "
-            "FACULTY can view assessments only for assigned courses. "
-            "Supports filtering by course, assessment type, academic year "
-            "and semester."
+            "FACULTY can view assessments only for their assigned offerings. "
+            "Supports filtering by offering, course, assessment type, "
+            "academic year and semester."
         ),
         security=[{"bearerAuth": []}],
     )
-    @blp.arguments(AssessmentQuerySchema, location="query")
-    @blp.response(200, AssessmentPaginatedResponseSchema)
+    @blp.arguments(
+        AssessmentQuerySchema,
+        location="query",
+    )
+    @blp.response(
+        200,
+        AssessmentPaginatedResponseSchema,
+    )
     @role_required("ADMIN", "FACULTY")
     def get(self, query_args):
 
@@ -99,6 +111,7 @@ class AssessmentCollectionResource(MethodView):
                 actor_role=get_current_user_role(),
                 page=query_args["page"],
                 per_page=query_args["per_page"],
+                offering_id=query_args.get("offering_id"),
                 course_id=query_args.get("course_id"),
                 assessment_type=query_args.get("assessment_type"),
                 academic_year=query_args.get("academic_year"),
@@ -116,11 +129,14 @@ class AssessmentDetailResource(MethodView):
         summary="Get assessment by UUID",
         description=(
             "ADMIN can view any assessment. FACULTY can view "
-            "assessments belonging to assigned courses."
+            "assessments belonging to their assigned offerings."
         ),
         security=[{"bearerAuth": []}],
     )
-    @blp.response(200, AssessmentResponseSchema)
+    @blp.response(
+        200,
+        AssessmentResponseSchema,
+    )
     @role_required("ADMIN", "FACULTY")
     def get(self, assessment_id):
 
@@ -142,12 +158,16 @@ class AssessmentDetailResource(MethodView):
         summary="Update assessment",
         description=(
             "ADMIN can update any assessment. FACULTY can update "
-            "assessments belonging to assigned courses."
+            "assessments belonging to their assigned offerings. "
+            "The offering association cannot be changed."
         ),
         security=[{"bearerAuth": []}],
     )
     @blp.arguments(AssessmentUpdateSchema)
-    @blp.response(200, AssessmentResponseSchema)
+    @blp.response(
+        200,
+        AssessmentResponseSchema,
+    )
     @role_required("ADMIN", "FACULTY")
     def patch(self, data, assessment_id):
 
@@ -160,9 +180,6 @@ class AssessmentDetailResource(MethodView):
             )
 
         except AssessmentNotFoundError as exc:
-            abort(404, message=str(exc))
-
-        except CourseNotFoundError as exc:
             abort(404, message=str(exc))
 
         except DuplicateAssessmentError as exc:

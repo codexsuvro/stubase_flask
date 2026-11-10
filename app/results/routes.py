@@ -57,8 +57,8 @@ class AssessmentResultCollectionResource(MethodView):
     @blp.doc(
         summary="Create an assessment result",
         description=(
-            "ADMIN can create results for all courses. "
-            "FACULTY can create results only for assigned courses."
+            "ADMIN can create results for all offerings. "
+            "FACULTY can create results only for their assigned offerings."
         ),
         security=[{"bearerAuth": []}],
     )
@@ -92,7 +92,10 @@ class AssessmentResultCollectionResource(MethodView):
 
     @blp.doc(
         summary="List assessment results",
-        description="ADMIN can view all assessment results with pagination and filters.",
+        description=(
+            "ADMIN can view all results. FACULTY can view results "
+            "belonging to their assigned course offerings."
+        ),
         security=[{"bearerAuth": []}],
     )
     @blp.arguments(
@@ -103,7 +106,7 @@ class AssessmentResultCollectionResource(MethodView):
         200,
         AssessmentResultPaginatedResponseSchema,
     )
-    @role_required("ADMIN")
+    @role_required("ADMIN", "FACULTY")
     def get(self, args):
 
         try:
@@ -173,6 +176,9 @@ class AssessmentResultDetailResource(MethodView):
 
         except AssessmentResultNotFoundError as exc:
             abort(404, message=str(exc))
+
+        except InvalidAssessmentResultError as exc:
+            abort(422, message=str(exc))
 
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))
@@ -312,6 +318,9 @@ class CourseResultAnalyticsResource(MethodView):
         except AssessmentNotFoundError as exc:
             abort(404, message=str(exc))
 
+        except InvalidAssessmentResultError as exc:
+            abort(422, message=str(exc))
+
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))
 
@@ -336,6 +345,9 @@ class AssessmentResultAnalyticsResource(MethodView):
 
         except AssessmentNotFoundError as exc:
             abort(404, message=str(exc))
+
+        except InvalidAssessmentResultError as exc:
+            abort(422, message=str(exc))
 
         except AssessmentResultAccessDeniedError as exc:
             abort(403, message=str(exc))

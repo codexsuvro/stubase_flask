@@ -16,6 +16,13 @@ ASSESSMENT_TYPES = [
 
 
 class AssessmentCreateSchema(Schema):
+    
+    offering_id = fields.UUID(
+        required=True,
+        metadata={
+            "description": "UUID of the course offering."
+        },
+    )
 
     assessment_name = fields.String(
         required=True,
@@ -30,25 +37,6 @@ class AssessmentCreateSchema(Schema):
     sequence_number = fields.Integer(
         load_default=1,
         validate=validate.Range(min=1),
-    )
-
-    course_id = fields.UUID(
-        required=True,
-        metadata={"description": "UUID of the associated course."},
-    )
-
-    semester = fields.Integer(
-        required=True,
-        validate=validate.Range(min=1, max=12),
-    )
-
-    academic_year = fields.String(
-        required=True,
-        validate=validate.Regexp(
-            r"^\d{4}-\d{4}$",
-            error="Academic year must use the format YYYY-YYYY.",
-        ),
-        metadata={"example": "2026-2027"},
     )
 
     max_marks = fields.Decimal(
@@ -106,23 +94,6 @@ class AssessmentUpdateSchema(Schema):
         validate=validate.Range(min=1),
     )
 
-    course_id = fields.UUID(
-        required=False,
-    )
-
-    semester = fields.Integer(
-        required=False,
-        validate=validate.Range(min=1, max=12),
-    )
-
-    academic_year = fields.String(
-        required=False,
-        validate=validate.Regexp(
-            r"^\d{4}-\d{4}$",
-            error="Academic year must use the format YYYY-YYYY.",
-        ),
-    )
-
     max_marks = fields.Decimal(
         required=False,
         as_string=True,
@@ -143,7 +114,7 @@ class AssessmentUpdateSchema(Schema):
         required=False,
         allow_none=True,
     )
-    
+
     @validates_schema
     def validate_not_empty(self, data, **kwargs):
         if not data:
@@ -176,12 +147,29 @@ class AssessmentCourseSummarySchema(Schema):
     credits = fields.Integer(dump_only=True)
 
 
+class AssessmentOfferingSummarySchema(Schema):
+
+    id = fields.UUID(dump_only=True)
+    section_code = fields.String(dump_only=True)
+    capacity = fields.Integer(dump_only=True)
+    status = fields.String(dump_only=True)
+    semester_id = fields.UUID(dump_only=True)
+    faculty_id = fields.UUID(dump_only=True)
+
+
 class AssessmentResponseSchema(Schema):
 
     id = fields.UUID(dump_only=True)
     assessment_name = fields.String(dump_only=True)
     assessment_type = fields.String(dump_only=True)
     sequence_number = fields.Integer(dump_only=True)
+    offering_id = fields.UUID(dump_only=True)
+
+    offering = fields.Nested(
+        AssessmentOfferingSummarySchema,
+        dump_only=True,
+    )
+
     course_id = fields.UUID(dump_only=True)
 
     course = fields.Nested(
@@ -225,6 +213,10 @@ class AssessmentQuerySchema(Schema):
         validate=validate.Range(min=1, max=100),
     )
 
+    offering_id = fields.UUID(
+        required=False,
+    )
+
     course_id = fields.UUID(
         required=False,
     )
@@ -246,8 +238,8 @@ class AssessmentQuerySchema(Schema):
         required=False,
         validate=validate.Range(min=1, max=12),
     )
-    
-    
+
+
 class AssessmentPaginationMetadataSchema(Schema):
 
     page = fields.Integer(dump_only=True)

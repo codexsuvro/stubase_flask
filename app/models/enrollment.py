@@ -1,3 +1,4 @@
+
 from app.extensions import db
 from app.models.base import BaseModel, UUIDMixin
 
@@ -5,14 +6,12 @@ from app.models.base import BaseModel, UUIDMixin
 class Enrollment(UUIDMixin, BaseModel):
 
     __tablename__ = "enrollments"
-    
+
     __table_args__ = (
         db.UniqueConstraint(
             "student_id",
-            "course_id",
-            "academic_year",
-            "semester",
-            name="uq_student_course_semester",
+            "offering_id",
+            name="uq_student_offering",
         ),
     )
 
@@ -42,7 +41,20 @@ class Enrollment(UUIDMixin, BaseModel):
         db.String(20),
         nullable=False,
     )
-    
+
+    offering_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("course_offerings.id"),
+        nullable=True,
+        index=True,
+    )
+
+    offering = db.relationship(
+        "CourseOffering",
+        back_populates="enrollments",
+        lazy="selectin",
+    )
+
     student = db.relationship(
         "Student",
         back_populates="enrollments",
@@ -61,7 +73,7 @@ class Enrollment(UUIDMixin, BaseModel):
         lazy="selectin",
         cascade="all, delete-orphan",
     )
-    
+
     assessment_results = db.relationship(
         "AssessmentResult",
         back_populates="enrollment",

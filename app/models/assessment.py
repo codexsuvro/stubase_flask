@@ -1,3 +1,4 @@
+
 from app.extensions import db
 from app.models.base import BaseModel, UUIDMixin
 
@@ -8,12 +9,10 @@ class Assessment(UUIDMixin, BaseModel):
 
     __table_args__ = (
         db.UniqueConstraint(
-            "course_id",
-            "academic_year",
-            "semester",
+            "offering_id",
             "assessment_type",
             "sequence_number",
-            name="uq_course_assessment_sequence",
+            name="uq_offering_assessment_sequence",
         ),
     )
 
@@ -69,12 +68,25 @@ class Assessment(UUIDMixin, BaseModel):
         nullable=True,
     )
 
+    offering_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("course_offerings.id"),
+        nullable=True,
+        index=True,
+    )
+
+    offering = db.relationship(
+        "CourseOffering",
+        back_populates="assessments",
+        lazy="selectin",
+    )
+
     course = db.relationship(
         "Course",
         back_populates="assessments",
         lazy="selectin",
     )
-    
+
     results = db.relationship(
         "AssessmentResult",
         back_populates="assessment",

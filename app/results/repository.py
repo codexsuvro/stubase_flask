@@ -4,7 +4,7 @@ from app.extensions import db
 from app.models.assessment_result import AssessmentResult
 from app.models.assessment import Assessment
 from app.models.enrollment import Enrollment
-from app.models.course import Course
+from app.models.course_offering import CourseOffering
 
 
 def create_result(data):
@@ -25,6 +25,11 @@ def get_result_by_id(result_id):
                 AssessmentResult.assessment
             ).selectinload(
                 Assessment.course
+            ),
+            selectinload(
+                AssessmentResult.assessment
+            ).selectinload(
+                Assessment.offering
             ),
             selectinload(
                 AssessmentResult.enrollment
@@ -100,6 +105,11 @@ def list_results_paginated(
                 Assessment.course
             ),
             selectinload(
+                AssessmentResult.assessment
+            ).selectinload(
+                Assessment.offering
+            ),
+            selectinload(
                 AssessmentResult.enrollment
             ).selectinload(
                 Enrollment.student
@@ -150,19 +160,19 @@ def list_results_paginated(
         stmt = (
             stmt
             .join(
-                Course,
-                Assessment.course_id == Course.id,
+                CourseOffering,
+                Assessment.offering_id == CourseOffering.id,
             )
-            .where(Course.faculty_id == faculty_id)
+            .where(CourseOffering.faculty_id == faculty_id)
         )
 
         count_stmt = (
             count_stmt
             .join(
-                Course,
-                Assessment.course_id == Course.id,
+                CourseOffering,
+                Assessment.offering_id == CourseOffering.id,
             )
-            .where(Course.faculty_id == faculty_id)
+            .where(CourseOffering.faculty_id == faculty_id)
         )
 
     if student_id is not None:

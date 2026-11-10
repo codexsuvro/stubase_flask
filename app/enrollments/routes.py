@@ -15,9 +15,9 @@ from app.enrollments.repository import (
 from app.enrollments.service import (
     create_enrollment,
     StudentNotFoundError,
-    CourseNotFoundError,
     InvalidEnrollmentError,
     DuplicateEnrollmentError,
+    OfferingNotFoundError,
 )
 from app.models.student import Student
 from app.extensions import db
@@ -37,8 +37,8 @@ class EnrollmentCollectionResource(MethodView):
     @blp.doc(
         summary="Enroll a student in a course",
         description=(
-            "ADMIN only. Creates an enrollment after validating "
-            "the student, course, department, semester, and duplicates."
+            "ADMIN only. Creates an enrollment in an OPEN course offering "
+            "after validating department, academic state, duplicates and capacity."
         ),
         security=[{"bearerAuth": []}],
     )
@@ -52,14 +52,14 @@ class EnrollmentCollectionResource(MethodView):
         except StudentNotFoundError as exc:
             abort(404, message=str(exc))
 
-        except CourseNotFoundError as exc:
-            abort(404, message=str(exc))
-
         except DuplicateEnrollmentError as exc:
             abort(409, message=str(exc))
 
         except InvalidEnrollmentError as exc:
             abort(409, message=str(exc))
+            
+        except OfferingNotFoundError as exc:
+            abort(404, message=str(exc))
 
 
     @blp.doc(
@@ -83,6 +83,7 @@ class EnrollmentCollectionResource(MethodView):
             academic_year=query_args.get("academic_year"),
             semester=query_args.get("semester"),
             status=query_args.get("status"),
+            offering_id=query_args.get("offering_id"),
         )
 
 

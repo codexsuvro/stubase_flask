@@ -1,39 +1,12 @@
+
 from marshmallow import Schema, fields, validate
 
 
 class EnrollmentCreateSchema(Schema):
-    student_id = fields.UUID(
-        required=True,
-        metadata={
-            "description": "UUID of the Student profile, not the User account."
-        },
-    )
 
-    course_id = fields.UUID(
-        required=True,
-        metadata={"description": "UUID of the course."},
-    )
+    student_id = fields.UUID(required=True)
 
-    semester = fields.Integer(
-        required=True,
-        validate=validate.Range(min=1, max=12),
-    )
-
-    academic_year = fields.String(
-        required=True,
-        validate=validate.Regexp(
-            r"^\d{4}-\d{4}$",
-            error="Academic year must use the format YYYY-YYYY, e.g. 2026-2027.",
-        ),
-        metadata={"example": "2026-2027"},
-    )
-
-    status = fields.String(
-        load_default="ENROLLED",
-        validate=validate.OneOf(
-            ["ENROLLED", "WITHDRAWN", "COMPLETED"]
-        ),
-    )
+    offering_id = fields.UUID(required=True)
 
 
 class EnrollmentStudentSummarySchema(Schema):
@@ -50,12 +23,20 @@ class EnrollmentCourseSummarySchema(Schema):
     credits = fields.Integer(dump_only=True)
     semester = fields.Integer(dump_only=True)
 
+class EnrollmentOfferingSummarySchema(Schema):
+    id = fields.UUID(dump_only=True)
+    section_code = fields.String(dump_only=True)
+    capacity = fields.Integer(dump_only=True)
+    status = fields.String(dump_only=True)
+    semester_id = fields.UUID(dump_only=True)
+    faculty_id = fields.UUID(dump_only=True)
 
 class EnrollmentResponseSchema(Schema):
     id = fields.UUID(dump_only=True)
 
     student_id = fields.UUID(dump_only=True)
     course_id = fields.UUID(dump_only=True)
+    offering_id = fields.UUID(dump_only=True)
 
     semester = fields.Integer(dump_only=True)
     academic_year = fields.String(dump_only=True)
@@ -71,9 +52,14 @@ class EnrollmentResponseSchema(Schema):
         dump_only=True,
     )
 
+    offering = fields.Nested(
+        EnrollmentOfferingSummarySchema,
+        dump_only=True,
+    )
+
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
-    
+
 
 class EnrollmentQuerySchema(Schema):
     page = fields.Integer(
@@ -89,6 +75,8 @@ class EnrollmentQuerySchema(Schema):
     student_id = fields.UUID(required=False)
 
     course_id = fields.UUID(required=False)
+
+    offering_id = fields.UUID(required=False)
 
     academic_year = fields.String(
         required=False,
@@ -106,7 +94,7 @@ class EnrollmentQuerySchema(Schema):
     status = fields.String(
         required=False,
         validate=validate.OneOf(
-            ["ENROLLED", "WITHDRAWN", "COMPLETED"]
+            ["ENROLLED", "WITHDRAWN", "COMPLETED"],
         ),
     )
 

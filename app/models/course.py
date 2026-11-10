@@ -51,6 +51,12 @@ class Course(UUIDMixin, BaseModel):
         lazy="selectin",
     )
 
+    offerings = db.relationship(
+        "CourseOffering", 
+        back_populates="course", 
+        lazy="selectin",
+    )
+
     enrollments = db.relationship(
         "Enrollment",
         back_populates="course",
