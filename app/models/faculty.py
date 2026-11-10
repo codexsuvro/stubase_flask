@@ -70,6 +70,12 @@ class Faculty(UUIDMixin, BaseModel):
         lazy="selectin",
     )
     
+    course_offerings = db.relationship(
+        "CourseOffering", 
+        back_populates="faculty", 
+        lazy="selectin",
+    )
+
     headed_department = db.relationship(
         "Department",
         foreign_keys="Department.hod_faculty_id",

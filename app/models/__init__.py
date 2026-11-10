@@ -11,3 +11,4 @@ from app.models.assessment import Assessment
 from app.models.assessment_result import AssessmentResult
 from app.models.academic_year import AcademicYear
 from app.models.semester import Semester
+from app.models.course_offering import CourseOffering

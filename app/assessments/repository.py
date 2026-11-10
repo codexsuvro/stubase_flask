@@ -1,28 +1,26 @@
 from sqlalchemy import select, func
 from app.extensions import db
 from app.models.assessment import Assessment
-from app.models.course import Course
+from app.models.course_offering import CourseOffering
 
 
 def get_assessment_by_id(assessment_id):
-    """Return an assessment by its UUID."""
-    return db.session.get(Assessment, assessment_id)
+
+    return db.session.get(
+        Assessment,
+        assessment_id,
+    )
 
 
-def get_assessment_by_unique_fields(
-    course_id,
-    academic_year,
-    semester,
+def get_assessment_by_offering_unique_fields(
+    offering_id,
     assessment_type,
     sequence_number,
     exclude_assessment_id=None,
 ):
-    """Find an assessment using its unique business fields."""
 
     statement = select(Assessment).where(
-        Assessment.course_id == course_id,
-        Assessment.academic_year == academic_year,
-        Assessment.semester == semester,
+        Assessment.offering_id == offering_id,
         Assessment.assessment_type == assessment_type,
         Assessment.sequence_number == sequence_number,
     )
@@ -38,22 +36,30 @@ def get_assessment_by_unique_fields(
 def list_assessments_paginated(
     page=1,
     per_page=10,
+    offering_id=None,
     course_id=None,
     assessment_type=None,
     academic_year=None,
     semester=None,
     faculty_id=None,
 ):
-    """Return paginated assessments with optional filters."""
 
     statement = select(Assessment)
 
-    # Restrict results to courses assigned to a faculty member.
     if faculty_id is not None:
-        statement = statement.join(
-            Assessment.course
-        ).where(
-            Course.faculty_id == faculty_id
+        statement = (
+            statement
+            .join(
+                Assessment.offering
+            )
+            .where(
+                CourseOffering.faculty_id == faculty_id
+            )
+        )
+
+    if offering_id is not None:
+        statement = statement.where(
+            Assessment.offering_id == offering_id
         )
 
     if course_id is not None:
@@ -76,14 +82,20 @@ def list_assessments_paginated(
             Assessment.semester == semester
         )
 
-    count_statement = select(func.count()).select_from(
-        statement.order_by(None).subquery()
+    count_statement = (
+        select(func.count())
+        .select_from(
+            statement.order_by(None).subquery()
+        )
     )
 
-    total_records = db.session.scalar(count_statement) or 0
+    total_records = (
+        db.session.scalar(count_statement) or 0
+    )
 
     records = db.session.scalars(
-        statement.order_by(
+        statement
+        .order_by(
             Assessment.academic_year.desc(),
             Assessment.semester.asc(),
             Assessment.assessment_date.desc(),
@@ -115,7 +127,6 @@ def list_assessments_paginated(
 
 
 def create_assessment(assessment):
-    """Persist a new assessment."""
 
     db.session.add(assessment)
     db.session.commit()
@@ -125,7 +136,6 @@ def create_assessment(assessment):
 
 
 def update_assessment():
-    """Commit changes to an existing assessment."""
 
     db.session.commit()
 
@@ -133,7 +143,6 @@ def update_assessment():
 
 
 def delete_assessment(assessment):
-    """Delete an assessment record."""
 
     db.session.delete(assessment)
     db.session.commit()

@@ -66,6 +66,12 @@ class Semester(UUIDMixin, BaseModel):
         lazy="selectin",
     )
 
+    course_offerings = db.relationship(
+        "CourseOffering", 
+        back_populates="semester", 
+        lazy="selectin",
+    )
+
     def __repr__(self):
         return (
             f"<Semester {self.semester_number} "

@@ -4,30 +4,34 @@ from app.models.enrollment import Enrollment
 
 
 def get_enrollment_by_id(enrollment_id):
-    return db.session.get(Enrollment, enrollment_id)
+
+    return db.session.get(
+        Enrollment,
+        enrollment_id,
+    )
 
 
 def get_enrollment_by_unique_fields(
     student_id,
-    course_id,
-    academic_year,
-    semester,
+    offering_id,
 ):
     statement = select(Enrollment).where(
         Enrollment.student_id == student_id,
-        Enrollment.course_id == course_id,
-        Enrollment.academic_year == academic_year,
-        Enrollment.semester == semester,
+        Enrollment.offering_id == offering_id,
     )
 
     return db.session.scalar(statement)
 
 
 def list_enrollments():
-    statement = select(Enrollment).order_by(
-        Enrollment.academic_year.desc(),
-        Enrollment.semester.asc(),
-        Enrollment.created_at.desc(),
+
+    statement = (
+        select(Enrollment)
+        .order_by(
+            Enrollment.academic_year.desc(),
+            Enrollment.semester.asc(),
+            Enrollment.created_at.desc(),
+        )
     )
 
     return db.session.scalars(statement).all()
@@ -38,17 +42,14 @@ def list_enrollments_paginated(
     per_page=10,
     student_id=None,
     course_id=None,
+    offering_id=None,
     academic_year=None,
     semester=None,
     status=None,
 ):
-    """
-    Return paginated enrollment records with optional filters.
-    """
 
     statement = select(Enrollment)
 
-    # Apply filters
     if student_id is not None:
         statement = statement.where(
             Enrollment.student_id == student_id
@@ -57,6 +58,11 @@ def list_enrollments_paginated(
     if course_id is not None:
         statement = statement.where(
             Enrollment.course_id == course_id
+        )
+
+    if offering_id is not None:
+        statement = statement.where(
+            Enrollment.offering_id == offering_id
         )
 
     if academic_year is not None:
@@ -74,14 +80,17 @@ def list_enrollments_paginated(
             Enrollment.status == status
         )
 
-    # Count matching records before pagination
-    count_statement = select(func.count()).select_from(
-        statement.order_by(None).subquery()
+    count_statement = (
+        select(func.count())
+        .select_from(
+            statement.order_by(None).subquery()
+        )
     )
 
-    total_records = db.session.scalar(count_statement) or 0
+    total_records = (
+        db.session.scalar(count_statement) or 0
+    )
 
-    # Fetch paginated records
     records = db.session.scalars(
         statement
         .order_by(
@@ -116,7 +125,9 @@ def list_enrollments_paginated(
 def list_enrollments_by_student(student_id):
     statement = (
         select(Enrollment)
-        .where(Enrollment.student_id == student_id)
+        .where(
+            Enrollment.student_id == student_id
+        )
         .order_by(
             Enrollment.academic_year.desc(),
             Enrollment.semester.asc(),
