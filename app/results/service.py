@@ -226,13 +226,37 @@ def get_result_for_user(result_id, actor_user_id, actor_role):
     if result is None:
         raise AssessmentResultNotFoundError("Assessment result not found.")
 
-    _validate_result_association_and_access(
-        result.assessment,
-        result.enrollment,
-        actor_user_id,
-        actor_role,
+    if actor_role == "ADMIN":
+        return result
+
+    if actor_role == "FACULTY":
+        _validate_result_association_and_access(
+            result.assessment,
+            result.enrollment,
+            actor_user_id,
+            actor_role,
+        )
+        return result
+
+    if actor_role == "STUDENT":
+        student = get_student_profile(actor_user_id)
+
+        if student is None:
+            raise AssessmentResultAccessDeniedError(
+                "Student profile was not found."
+            )
+
+        if result.enrollment.student_id != student.id:
+            raise AssessmentResultAccessDeniedError(
+                "You can access only your own assessment results."
+            )
+
+        return result
+
+    raise AssessmentResultAccessDeniedError(
+        "You are not authorized to view this assessment result."
     )
-    return result
+
 
 
 def list_results_for_user(

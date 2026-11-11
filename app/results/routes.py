@@ -164,7 +164,7 @@ class AssessmentResultDetailResource(MethodView):
         security=[{"bearerAuth": []}],
     )
     @blp.response(200, AssessmentResultResponseSchema)
-    @role_required("ADMIN", "FACULTY")
+    @role_required("ADMIN", "FACULTY", "STUDENT")
     def get(self, result_id):
 
         try:

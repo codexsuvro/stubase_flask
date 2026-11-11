@@ -1,10 +1,11 @@
 from datetime import date
-from sqlalchemy import func, case, exists
+from sqlalchemy import and_, case, exists, func
 from app.extensions import db
 from app.models.student import Student
 from app.models.faculty import Faculty
 from app.models.department import Department
 from app.models.course import Course
+from app.models.course_offering import CourseOffering
 from app.models.enrollment import Enrollment
 from app.models.attendance import Attendance
 from app.models.assessment import Assessment
@@ -116,21 +117,21 @@ class DashboardRepository:
 
     @staticmethod
     def get_faculty_overview(faculty_id):
-        """Fetch dashboard metrics limited to one faculty member."""
+        """Fetch dashboard metrics for a faculty member's offerings."""
 
         assigned_courses = db.session.query(
-            func.count(Course.id)
+            func.count(func.distinct(CourseOffering.course_id))
         ).filter(
-            Course.faculty_id == faculty_id
+            CourseOffering.faculty_id == faculty_id
         ).scalar() or 0
 
         active_enrollments = db.session.query(
             func.count(Enrollment.id)
         ).join(
-            Course,
-            Enrollment.course_id == Course.id,
+            CourseOffering,
+            Enrollment.offering_id == CourseOffering.id,
         ).filter(
-            Course.faculty_id == faculty_id,
+            CourseOffering.faculty_id == faculty_id,
             Enrollment.status == "ENROLLED",
         ).scalar() or 0
 
@@ -158,16 +159,16 @@ class DashboardRepository:
             Enrollment,
             Attendance.enrollment_id == Enrollment.id,
         ).join(
-            Course,
-            Enrollment.course_id == Course.id,
+            CourseOffering,
+            Enrollment.offering_id == CourseOffering.id,
         ).filter(
-            Course.faculty_id == faculty_id,
+            CourseOffering.faculty_id == faculty_id,
         ).first()
 
+        total_records = attendance_stats.total_records or 0
         present_count = attendance_stats.present_count or 0
         absent_count = attendance_stats.absent_count or 0
         late_count = attendance_stats.late_count or 0
-        total_records = attendance_stats.total_records or 0
 
         recorded_classes = present_count + absent_count + late_count
 
@@ -192,10 +193,10 @@ class DashboardRepository:
             Assessment,
             AssessmentResult.assessment_id == Assessment.id,
         ).join(
-            Course,
-            Assessment.course_id == Course.id,
+            CourseOffering,
+            Assessment.offering_id == CourseOffering.id,
         ).filter(
-            Course.faculty_id == faculty_id,
+            CourseOffering.faculty_id == faculty_id,
         ).first()
 
         obtained_marks = float(assessment_stats.obtained_marks or 0)
@@ -216,7 +217,6 @@ class DashboardRepository:
             "overall_result_percentage": result_percentage,
         }
 
-    
     @staticmethod
     def get_student_overview(student_id):
         """Fetch dashboard metrics for one student."""
@@ -255,10 +255,10 @@ class DashboardRepository:
             Enrollment.student_id == student_id,
         ).first()
 
+        total_records = attendance_stats.total_records or 0
         present_count = attendance_stats.present_count or 0
         absent_count = attendance_stats.absent_count or 0
         late_count = attendance_stats.late_count or 0
-        total_records = attendance_stats.total_records or 0
 
         recorded_classes = present_count + absent_count + late_count
 
@@ -298,18 +298,23 @@ class DashboardRepository:
             else 0.0
         )
 
+        # Only assessments belonging to this student's enrolled offerings
+        # are considered. Existing results are checked per student enrollment.
         upcoming_assessments = db.session.query(
             Assessment
+        ).join(
+            Enrollment,
+            Assessment.offering_id == Enrollment.offering_id,
         ).filter(
-            Assessment.course_id.in_(
-                db.session.query(Enrollment.course_id).filter(
-                    Enrollment.student_id == student_id,
-                    Enrollment.status == "ENROLLED",
-                )
-            ),
+            Enrollment.student_id == student_id,
+            Enrollment.status == "ENROLLED",
+            Enrollment.offering_id.isnot(None),
             Assessment.assessment_date >= date.today(),
             ~exists().where(
-                AssessmentResult.assessment_id == Assessment.id
+                and_(
+                    AssessmentResult.assessment_id == Assessment.id,
+                    AssessmentResult.enrollment_id == Enrollment.id,
+                )
             ),
         ).order_by(
             Assessment.assessment_date.asc(),
@@ -324,4 +329,3 @@ class DashboardRepository:
             "overall_result_percentage": result_percentage,
             "upcoming_assessments": upcoming_assessments,
         }
-
