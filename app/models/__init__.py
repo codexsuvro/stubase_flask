@@ -12,3 +12,4 @@ from app.models.assessment_result import AssessmentResult
 from app.models.academic_year import AcademicYear
 from app.models.semester import Semester
 from app.models.course_offering import CourseOffering
+from app.timetable.models import Classroom, TimetableSlot
