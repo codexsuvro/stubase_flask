@@ -219,6 +219,7 @@ def create_assessment(data, actor_user_id, actor_role):
 
         max_marks=data["max_marks"],
         passing_marks=data["passing_marks"],
+        weightage=data["weightage"],
         assessment_date=data["assessment_date"],
         description=data.get("description"),
     )
