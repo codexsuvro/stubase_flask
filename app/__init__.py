@@ -67,6 +67,8 @@ def create_app():
     from app.academic_calendar.routes import blp as academic_calendar_blueprint
     from app.course_offerings.routes import blp as course_offerings_blueprint
     from app.timetable.routes import blp as timetable_blueprint
+    from app.course_prerequisites.routes import blp as course_prerequisites_blueprint
+    from app.waitlists.routes import blp as waitlists_blueprint
     
     api.register_blueprint(auth_blueprint)
     api.register_blueprint(users_blueprint)
@@ -80,6 +82,8 @@ def create_app():
     api.register_blueprint(academic_calendar_blueprint)
     api.register_blueprint(course_offerings_blueprint)
     api.register_blueprint(timetable_blueprint)
+    api.register_blueprint(course_prerequisites_blueprint)
+    api.register_blueprint(waitlists_blueprint)
     
     app.cli.add_command(seed)
     
