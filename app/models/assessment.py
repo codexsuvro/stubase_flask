@@ -14,6 +14,10 @@ class Assessment(UUIDMixin, BaseModel):
             "sequence_number",
             name="uq_offering_assessment_sequence",
         ),
+        db.CheckConstraint(
+            "weightage >= 0 AND weightage <= 100",
+            name="ck_assessment_weightage",
+        ),
     )
 
     assessment_name = db.Column(
@@ -56,6 +60,13 @@ class Assessment(UUIDMixin, BaseModel):
     passing_marks = db.Column(
         db.Numeric(7, 2),
         nullable=False,
+    )
+    
+    weightage = db.Column(
+        db.Numeric(5, 2),
+        nullable=False,
+        default=0,
+        server_default="0",
     )
 
     assessment_date = db.Column(

@@ -59,6 +59,17 @@ class AssessmentCreateSchema(Schema):
         required=False,
         allow_none=True,
     )
+    
+    weightage = fields.Decimal(
+        required=True,
+        as_string=True,
+        places=2,
+        validate=validate.Range(
+            min=0,
+            max=100,
+            error="Weightage must be between 0 and 100.",
+        ),
+    )
 
     @validates_schema
     def validate_marks(self, data, **kwargs):
@@ -113,6 +124,16 @@ class AssessmentUpdateSchema(Schema):
     description = fields.String(
         required=False,
         allow_none=True,
+    )
+    
+    weightage = fields.Decimal(
+        required=False,
+        as_string=True,
+        places=2,
+        validate=validate.Range(
+            min=0,
+            max=100,
+        ),
     )
 
     @validates_schema
@@ -199,6 +220,12 @@ class AssessmentResponseSchema(Schema):
 
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+    
+    weightage = fields.Decimal(
+        as_string=True,
+        places=2,
+        dump_only=True,
+    )
 
 
 class AssessmentQuerySchema(Schema):
