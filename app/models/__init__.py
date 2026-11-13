@@ -18,3 +18,4 @@ from app.models.course_waitlist import CourseWaitlist
 from app.models.grading_scheme import GradingScheme
 from app.models.grade_scale import GradeScale
 from app.models.course_grade import CourseGrade
+from app.faculty_workload.models import FacultyWorkloadPolicy
