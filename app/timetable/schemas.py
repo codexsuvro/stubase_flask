@@ -161,10 +161,6 @@ class TimetableSlotUpdateSchema(Schema):
         validate=validate.OneOf(SESSION_TYPES),
     )
 
-    status = fields.String(
-        validate=validate.OneOf(SLOT_STATUSES),
-    )
-
     remarks = fields.String(
         allow_none=True,
         validate=validate.Length(max=255),
