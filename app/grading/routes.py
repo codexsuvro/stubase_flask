@@ -1,4 +1,5 @@
 
+from flask import send_file
 from flask.views import MethodView
 from flask_jwt_extended import get_jwt_identity
 from flask_smorest import Blueprint, abort
@@ -19,6 +20,7 @@ from app.grading.schemas import (
 )
 
 from app.grading import service
+from app.grading.pdf import generate_transcript_pdf
 
 
 blp = Blueprint(
@@ -36,6 +38,19 @@ def get_current_user():
         abort(401, message="Authenticated user not found.")
 
     return user
+
+
+def create_transcript_pdf_response(transcript, filename):
+    """Create and return a downloadable transcript PDF."""
+
+    pdf_buffer = generate_transcript_pdf(transcript)
+
+    return send_file(
+        pdf_buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 @blp.route("/schemes")
@@ -150,3 +165,51 @@ class StudentTranscriptResource(MethodView):
             abort(404, message="Student not found.")
 
         return service.get_student_transcript(student)
+
+
+# ==================================================
+# Transcript PDF Download
+# ==================================================
+
+@blp.route("/transcripts/me/pdf")
+class MyTranscriptPDFResource(MethodView):
+
+    @role_required("STUDENT")
+    def get(self):
+        user = get_current_user()
+
+        if not user.student:
+            abort(404, message="Student profile not found.")
+
+        student = user.student
+
+        transcript = service.get_student_transcript(student)
+
+        filename = f"transcript_{student.student_id}.pdf"
+
+        return create_transcript_pdf_response(
+            transcript,
+            filename,
+        )
+
+
+@blp.route("/transcripts/<uuid:student_id>/pdf")
+class StudentTranscriptPDFResource(MethodView):
+
+    @role_required("ADMIN")
+    def get(self, student_id):
+        student = db.session.scalar(
+            select(Student).where(Student.id == student_id)
+        )
+
+        if not student:
+            abort(404, message="Student not found.")
+
+        transcript = service.get_student_transcript(student)
+
+        filename = f"transcript_{student.student_id}.pdf"
+
+        return create_transcript_pdf_response(
+            transcript,
+            filename,
+        )
