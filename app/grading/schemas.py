@@ -151,3 +151,51 @@ class TranscriptResponseSchema(Schema):
     total_credits = fields.Integer()
     earned_credits = fields.Integer()
     cgpa = fields.Decimal(as_string=True, places=2)
+    
+    
+class SemesterTranscriptQuerySchema(Schema):
+    academic_year = fields.String(
+        required=True,
+        validate=validate.Length(min=4, max=20),
+    )
+
+    semester = fields.Integer(
+        required=True,
+        validate=validate.Range(min=1, max=8),
+    )
+
+
+class YearTranscriptQuerySchema(Schema):
+    academic_year = fields.String(
+        required=True,
+        validate=validate.Length(min=4, max=20),
+    )
+
+
+class SemesterTranscriptResponseSchema(Schema):
+    student_id = fields.String()
+    student_name = fields.String()
+    academic_year = fields.String()
+    semester = fields.Integer()
+
+    courses = fields.List(
+        fields.Nested(TranscriptCourseSchema)
+    )
+
+    total_credits = fields.Integer()
+    earned_credits = fields.Integer()
+    sgpa = fields.Decimal(as_string=True, places=2)
+
+
+class YearTranscriptResponseSchema(Schema):
+    student_id = fields.String()
+    student_name = fields.String()
+    academic_year = fields.String()
+
+    courses = fields.List(
+        fields.Nested(TranscriptCourseSchema)
+    )
+
+    total_credits = fields.Integer()
+    earned_credits = fields.Integer()
+    year_gpa = fields.Decimal(as_string=True, places=2)
