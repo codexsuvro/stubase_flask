@@ -17,6 +17,10 @@ from app.grading.schemas import (
     CourseGradeCalculateSchema,
     CourseGradeResponseSchema,
     TranscriptResponseSchema,
+    SemesterTranscriptQuerySchema,
+    YearTranscriptQuerySchema,
+    SemesterTranscriptResponseSchema,
+    YearTranscriptResponseSchema,
 )
 
 from app.grading import service
@@ -40,10 +44,22 @@ def get_current_user():
     return user
 
 
-def create_transcript_pdf_response(transcript, filename):
-    """Create and return a downloadable transcript PDF."""
 
-    pdf_buffer = generate_transcript_pdf(transcript)
+def create_transcript_pdf_response(
+    transcript,
+    filename,
+    title="ACADEMIC TRANSCRIPT",
+    metric_label="CGPA",
+    metric_value=None,
+    period_label=None,
+):
+    pdf_buffer = generate_transcript_pdf(
+        transcript,
+        title=title,
+        metric_label=metric_label,
+        metric_value=metric_value,
+        period_label=period_label,
+    )
 
     return send_file(
         pdf_buffer,
@@ -212,4 +228,271 @@ class StudentTranscriptPDFResource(MethodView):
         return create_transcript_pdf_response(
             transcript,
             filename,
+        )
+
+# ==================================================
+# Semester-wise Transcript APIs
+# ==================================================
+
+@blp.route("/transcripts/me/semester")
+class MySemesterTranscriptResource(MethodView):
+
+    @blp.arguments(
+        SemesterTranscriptQuerySchema,
+        location="query",
+    )
+    @blp.response(200, SemesterTranscriptResponseSchema)
+    @role_required("STUDENT")
+    def get(self, query_data):
+        user = get_current_user()
+
+        if not user.student:
+            abort(404, message="Student profile not found.")
+
+        transcript = service.get_semester_transcript(
+            user.student,
+            query_data["academic_year"],
+            query_data["semester"],
+        )
+
+        return {
+            **transcript,
+            "sgpa": transcript["gpa"],
+        }
+
+
+@blp.route("/transcripts/<uuid:student_id>/semester")
+class StudentSemesterTranscriptResource(MethodView):
+
+    @blp.arguments(
+        SemesterTranscriptQuerySchema,
+        location="query",
+    )
+    @blp.response(200, SemesterTranscriptResponseSchema)
+    @role_required("ADMIN")
+    def get(self, query_data, student_id):
+        student = db.session.scalar(
+            select(Student).where(Student.id == student_id)
+        )
+
+        if not student:
+            abort(404, message="Student not found.")
+
+        transcript = service.get_semester_transcript(
+            student,
+            query_data["academic_year"],
+            query_data["semester"],
+        )
+
+        return {
+            **transcript,
+            "sgpa": transcript["gpa"],
+        }
+
+
+# ==================================================
+# Year-wise Transcript APIs
+# ==================================================
+
+@blp.route("/transcripts/me/year")
+class MyYearTranscriptResource(MethodView):
+
+    @blp.arguments(
+        YearTranscriptQuerySchema,
+        location="query",
+    )
+    @blp.response(200, YearTranscriptResponseSchema)
+    @role_required("STUDENT")
+    def get(self, query_data):
+        user = get_current_user()
+
+        if not user.student:
+            abort(404, message="Student profile not found.")
+
+        transcript = service.get_year_transcript(
+            user.student,
+            query_data["academic_year"],
+        )
+
+        return {
+            **transcript,
+            "year_gpa": transcript["gpa"],
+        }
+
+
+@blp.route("/transcripts/<uuid:student_id>/year")
+class StudentYearTranscriptResource(MethodView):
+
+    @blp.arguments(
+        YearTranscriptQuerySchema,
+        location="query",
+    )
+    @blp.response(200, YearTranscriptResponseSchema)
+    @role_required("ADMIN")
+    def get(self, query_data, student_id):
+        student = db.session.scalar(
+            select(Student).where(Student.id == student_id)
+        )
+
+        if not student:
+            abort(404, message="Student not found.")
+
+        transcript = service.get_year_transcript(
+            student,
+            query_data["academic_year"],
+        )
+
+        return {
+            **transcript,
+            "year_gpa": transcript["gpa"],
+        }
+
+
+# ==================================================
+# Semester-wise Transcript PDF
+# ==================================================
+
+@blp.route("/transcripts/me/semester/pdf")
+class MySemesterTranscriptPDFResource(MethodView):
+
+    @blp.arguments(
+        SemesterTranscriptQuerySchema,
+        location="query",
+    )
+    @role_required("STUDENT")
+    def get(self, query_data):
+        user = get_current_user()
+
+        if not user.student:
+            abort(404, message="Student profile not found.")
+
+        student = user.student
+
+        transcript = service.get_semester_transcript(
+            student,
+            query_data["academic_year"],
+            query_data["semester"],
+        )
+
+        return create_transcript_pdf_response(
+            transcript,
+            f"transcript_{student.student_id}_"
+            f"{query_data['academic_year']}_"
+            f"semester_{query_data['semester']}.pdf",
+            title="SEMESTER-WISE ACADEMIC TRANSCRIPT",
+            metric_label="SGPA",
+            metric_value=transcript["gpa"],
+            period_label=(
+                f"Academic Year: {query_data['academic_year']} | "
+                f"Semester: {query_data['semester']}"
+            ),
+        )
+
+
+@blp.route("/transcripts/<uuid:student_id>/semester/pdf")
+class StudentSemesterTranscriptPDFResource(MethodView):
+
+    @blp.arguments(
+        SemesterTranscriptQuerySchema,
+        location="query",
+    )
+    @role_required("ADMIN")
+    def get(self, query_data, student_id):
+        student = db.session.scalar(
+            select(Student).where(Student.id == student_id)
+        )
+
+        if not student:
+            abort(404, message="Student not found.")
+
+        transcript = service.get_semester_transcript(
+            student,
+            query_data["academic_year"],
+            query_data["semester"],
+        )
+
+        return create_transcript_pdf_response(
+            transcript,
+            f"transcript_{student.student_id}_"
+            f"{query_data['academic_year']}_"
+            f"semester_{query_data['semester']}.pdf",
+            title="SEMESTER-WISE ACADEMIC TRANSCRIPT",
+            metric_label="SGPA",
+            metric_value=transcript["gpa"],
+            period_label=(
+                f"Academic Year: {query_data['academic_year']} | "
+                f"Semester: {query_data['semester']}"
+            ),
+        )
+
+
+# ==================================================
+# Year-wise Transcript PDF
+# ==================================================
+
+@blp.route("/transcripts/me/year/pdf")
+class MyYearTranscriptPDFResource(MethodView):
+
+    @blp.arguments(
+        YearTranscriptQuerySchema,
+        location="query",
+    )
+    @role_required("STUDENT")
+    def get(self, query_data):
+        user = get_current_user()
+
+        if not user.student:
+            abort(404, message="Student profile not found.")
+
+        student = user.student
+
+        transcript = service.get_year_transcript(
+            student,
+            query_data["academic_year"],
+        )
+
+        return create_transcript_pdf_response(
+            transcript,
+            f"transcript_{student.student_id}_"
+            f"{query_data['academic_year']}_year.pdf",
+            title="ACADEMIC YEAR TRANSCRIPT",
+            metric_label="YEAR GPA",
+            metric_value=transcript["gpa"],
+            period_label=(
+                f"Academic Year: {query_data['academic_year']}"
+            ),
+        )
+
+
+@blp.route("/transcripts/<uuid:student_id>/year/pdf")
+class StudentYearTranscriptPDFResource(MethodView):
+
+    @blp.arguments(
+        YearTranscriptQuerySchema,
+        location="query",
+    )
+    @role_required("ADMIN")
+    def get(self, query_data, student_id):
+        student = db.session.scalar(
+            select(Student).where(Student.id == student_id)
+        )
+
+        if not student:
+            abort(404, message="Student not found.")
+
+        transcript = service.get_year_transcript(
+            student,
+            query_data["academic_year"],
+        )
+
+        return create_transcript_pdf_response(
+            transcript,
+            f"transcript_{student.student_id}_"
+            f"{query_data['academic_year']}_year.pdf",
+            title="ACADEMIC YEAR TRANSCRIPT",
+            metric_label="YEAR GPA",
+            metric_value=transcript["gpa"],
+            period_label=(
+                f"Academic Year: {query_data['academic_year']}"
+            ),
         )

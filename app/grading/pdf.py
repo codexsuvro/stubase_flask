@@ -28,7 +28,13 @@ def safe_text(value):
     return escape(str(value))
 
 
-def generate_transcript_pdf(transcript):
+def generate_transcript_pdf(
+    transcript,
+    title="Stubase Academic Transcript",
+    metric_label="CGPA",
+    metric_value=None,
+    period_label=None,
+):
     """
     Generate an academic transcript PDF in memory.
 
@@ -49,7 +55,7 @@ def generate_transcript_pdf(transcript):
         leftMargin=18 * mm,
         topMargin=18 * mm,
         bottomMargin=18 * mm,
-        title="Academic Transcript",
+        title=safe_text(title),
         author="StuBase Management System",
     )
 
@@ -123,7 +129,7 @@ def generate_transcript_pdf(transcript):
 
     story.append(
         Paragraph(
-            "ACADEMIC TRANSCRIPT",
+            safe_text(title),
             title_style,
         )
     )
@@ -132,9 +138,17 @@ def generate_transcript_pdf(transcript):
         timezone.utc
     ).strftime("%d %B %Y, %H:%M UTC")
 
+    subtitle_text = f"Generated on {generated_at}"
+
+    if period_label:
+        subtitle_text = (
+            f"{safe_text(period_label)}"
+            f"<br/>{subtitle_text}"
+        )
+
     story.append(
         Paragraph(
-            f"Generated on {generated_at}",
+            subtitle_text,
             subtitle_style,
         )
     )
@@ -215,16 +229,25 @@ def generate_transcript_pdf(transcript):
         )
     )
 
+    display_metric = (
+        metric_value
+        if metric_value is not None
+        else transcript.get("cgpa", "0.00")
+    )
+
     summary_data = [
         [
             Paragraph("<b>Total Credits</b>", cell_style),
             Paragraph("<b>Earned Credits</b>", cell_style),
-            Paragraph("<b>CGPA</b>", cell_style),
+            Paragraph(
+                f"<b>{safe_text(metric_label)}</b>",
+                cell_style,
+            ),
         ],
         [
             safe_text(transcript["total_credits"]),
             safe_text(transcript["earned_credits"]),
-            safe_text(transcript["cgpa"]),
+            safe_text(display_metric),
         ],
     ]
 

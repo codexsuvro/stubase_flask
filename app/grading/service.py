@@ -357,8 +357,17 @@ def publish_course_grade(grade_id, publisher_id):
     return grade
 
 
-def get_student_transcript(student):
-    grades = repo.get_published_grades_for_student(student.id)
+def _build_transcript(
+    student,
+    academic_year=None,
+    semester=None,
+    transcript_type="OVERALL",
+):
+    grades = repo.get_published_grades_for_student(
+        student.id,
+        academic_year=academic_year,
+        semester=semester,
+    )
 
     courses = []
     total_credits = 0
@@ -392,7 +401,7 @@ def get_student_transcript(student):
             "result_status": grade.result_status,
         })
 
-    cgpa = (
+    gpa = (
         money(weighted_points / Decimal(total_credits))
         if total_credits
         else Decimal("0.00")
@@ -406,5 +415,37 @@ def get_student_transcript(student):
         "courses": courses,
         "total_credits": total_credits,
         "earned_credits": earned_credits,
-        "cgpa": cgpa,
+        "gpa": gpa,
+        "cgpa": gpa,
+        "academic_year": academic_year,
+        "semester": semester,
+        "transcript_type": transcript_type,
     }
+
+
+def get_student_transcript(student):
+    return _build_transcript(
+        student,
+        transcript_type="OVERALL",
+    )
+
+
+def get_semester_transcript(
+    student,
+    academic_year,
+    semester,
+):
+    return _build_transcript(
+        student,
+        academic_year=academic_year,
+        semester=semester,
+        transcript_type="SEMESTER",
+    )
+
+
+def get_year_transcript(student, academic_year):
+    return _build_transcript(
+        student,
+        academic_year=academic_year,
+        transcript_type="YEAR",
+    )

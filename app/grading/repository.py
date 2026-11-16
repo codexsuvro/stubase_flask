@@ -70,7 +70,11 @@ def create_course_grade(grade):
     return grade
 
 
-def get_published_grades_for_student(student_id):
+def get_published_grades_for_student(
+    student_id,
+    academic_year=None,
+    semester=None,
+):
     statement = (
         select(CourseGrade)
         .join(Enrollment)
@@ -86,10 +90,22 @@ def get_published_grades_for_student(student_id):
                 Enrollment.student
             ),
         )
-        .order_by(
-            Enrollment.academic_year,
-            Enrollment.semester,
+    )
+
+    if academic_year is not None:
+        statement = statement.where(
+            Enrollment.academic_year == academic_year
         )
+
+    if semester is not None:
+        statement = statement.where(
+            Enrollment.semester == semester
+        )
+
+    statement = statement.order_by(
+        Enrollment.academic_year,
+        Enrollment.semester,
+        CourseGrade.created_at,
     )
     return db.session.scalars(statement).all()
 
