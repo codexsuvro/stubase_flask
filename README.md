@@ -311,11 +311,37 @@ SECRET_KEY=your-secret-key
 JWT_SECRET_KEY=your-jwt-secret-key
 
 SQLALCHEMY_DATABASE_URI=postgresql+psycopg://postgres:your_password@localhost:5432/stubase_management
+
+R2_ACCOUNT_ID=your-cloudflare-account-id
+R2_ACCESS_KEY_ID=your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+R2_BUCKET_NAME=your-private-bucket-name
 ```
 
 Replace the database credentials with your local PostgreSQL configuration.
+Assignment PDFs are uploaded to a private Cloudflare R2 bucket. R2 uses the
+S3-compatible endpoint derived from `R2_ACCOUNT_ID`; set `R2_ENDPOINT_URL`
+instead if using a custom endpoint. The PDF upload limit is 10 MiB. The
+application returns a temporary, authorization-checked download redirect.
+Create the bucket as private and use an R2 API token scoped to that bucket with
+object read/write permissions.
 
 **Security:** Use strong, unique secrets. Never commit your `.env` file or production credentials to version control.
+
+### Assignment PDF submissions
+
+Run the database migration after configuring R2. Student endpoints accept
+multipart form data with a `file` field:
+
+- `POST /assignments/{assignment_id}/submissions/pdf` to submit a PDF.
+- `PATCH /assignments/submissions/{submission_id}/pdf` to resubmit a PDF when
+  the assignment allows resubmissions.
+- `GET /assignments/submissions/{submission_id}/pdf` to download it. The API
+  authorizes the caller and redirects to a short-lived R2 URL.
+
+New submissions and resubmissions are PDF-only. The legacy `text_response`
+column and read-only response field are retained so existing text submissions
+remain readable; no migration drops or rewrites that historical data.
 
 ### 5. Run Database Migrations
 

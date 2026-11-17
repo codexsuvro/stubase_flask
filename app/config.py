@@ -9,6 +9,14 @@ class Config:
     
     SQLALCHEMY_DATABASE_URI = os.getenv("SQLALCHEMY_DATABASE_URI")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
+    R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL")
+    R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
+    R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
+    R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
+    R2_SIGNED_URL_TTL_SECONDS = 300
+    ASSIGNMENT_PDF_MAX_BYTES = 2 * 1024 * 1024
+    MAX_CONTENT_LENGTH = 3 * 1024 * 1024
     
     # ======================
     # JWT Configuration

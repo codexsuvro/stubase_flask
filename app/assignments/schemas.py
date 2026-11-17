@@ -160,32 +160,11 @@ class SubmissionQuerySchema(Schema):
     )
 
 
-class SubmissionCreateSchema(Schema):
-    text_response = fields.String(
+class SubmissionPDFUploadSchema(Schema):
+    file = fields.Raw(
         required=True,
-        validate=validate.Length(min=1, max=100000),
+        metadata={"type": "string", "format": "binary"},
     )
-
-    @validates("text_response")
-    def validate_text_response(self, value, **kwargs):
-        if not value.strip():
-            raise ValidationError(
-                "Submission response cannot contain only whitespace."
-            )
-
-
-class SubmissionUpdateSchema(Schema):
-    text_response = fields.String(
-        required=True,
-        validate=validate.Length(min=1, max=100000),
-    )
-
-    @validates("text_response")
-    def validate_text_response(self, value, **kwargs):
-        if not value.strip():
-            raise ValidationError(
-                "Submission response cannot contain only whitespace."
-            )
 
 
 class SubmissionGradeSchema(Schema):
@@ -269,6 +248,17 @@ class SubmissionResponseSchema(Schema):
     student_id = fields.UUID(dump_only=True)
 
     text_response = fields.String(
+        allow_none=True,
+        dump_only=True,
+        metadata={
+            "description": (
+                "Legacy response retained for historical submissions. "
+                "New submissions must use a PDF."
+            )
+        },
+    )
+
+    pdf_filename = fields.String(
         allow_none=True,
         dump_only=True,
     )

@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from flask import current_app
+from werkzeug.utils import secure_filename
 from app.extensions import db
 from app.models.course_offering import CourseOffering
 from app.models.enrollment import Enrollment
@@ -22,6 +24,12 @@ from app.assignments.repository import (
     save_assignment,
     save_submission,
     commit_changes,
+)
+from app.assignments.storage import (
+    AssignmentStorageError,
+    create_pdf_download_url,
+    delete_pdf,
+    store_pdf,
 )
 
 
@@ -46,6 +54,10 @@ class AssignmentValidationError(Exception):
 
 
 class AssignmentConflictError(Exception):
+    pass
+
+
+class AssignmentFileNotFoundError(Exception):
     pass
 
 
@@ -569,24 +581,7 @@ def list_my_assignments(
     )
 
 
-def submit_assignment(
-    assignment_id,
-    data,
-    actor_user_id,
-):
-    assignment = _get_assignment_or_404(
-        assignment_id
-    )
-
-    student = _student_for_user(
-        actor_user_id
-    )
-
-    if student is None:
-        raise AssignmentAccessDeniedError(
-            "Student profile was not found."
-        )
-
+def _submission_window(assignment, student):
     if assignment.status != "PUBLISHED":
         raise AssignmentValidationError(
             "Only PUBLISHED assignments can be submitted."
@@ -614,6 +609,61 @@ def submit_assignment(
             "The submission deadline has passed."
         )
 
+    return now, is_late
+
+
+def _read_assignment_pdf(upload):
+    filename = secure_filename(upload.filename or "")
+
+    if not filename or not filename.lower().endswith(".pdf"):
+        raise AssignmentValidationError(
+            "A PDF file with a .pdf filename is required."
+        )
+
+    max_bytes = current_app.config["ASSIGNMENT_PDF_MAX_BYTES"]
+    content = upload.stream.read(max_bytes + 1)
+
+    if len(content) > max_bytes:
+        raise AssignmentValidationError(
+            f"PDF files cannot exceed {max_bytes} bytes."
+        )
+
+    if not content or b"%PDF-" not in content[:1024]:
+        raise AssignmentValidationError(
+            "The uploaded file does not have a valid PDF header."
+        )
+
+    return filename, content
+
+
+def _delete_pdf_object(object_key):
+    if object_key is None:
+        return
+
+    try:
+        delete_pdf(object_key)
+    except AssignmentStorageError:
+        current_app.logger.exception(
+            "Could not remove assignment PDF object %s.",
+            object_key,
+        )
+
+
+def submit_pdf_assignment(
+    assignment_id,
+    upload,
+    actor_user_id,
+):
+    assignment = _get_assignment_or_404(assignment_id)
+    student = _student_for_user(actor_user_id)
+
+    if student is None:
+        raise AssignmentAccessDeniedError(
+            "Student profile was not found."
+        )
+
+    now, is_late = _submission_window(assignment, student)
+
     existing = get_submission_by_assignment_student(
         assignment.id,
         student.id,
@@ -624,10 +674,21 @@ def submit_assignment(
             "A submission already exists. Use the resubmission endpoint if enabled."
         )
 
+    filename, content = _read_assignment_pdf(upload)
+    submission_id = uuid4()
+    object_key = (
+        f"assignment-submissions/{assignment.id}/"
+        f"{student.id}/{submission_id}.pdf"
+    )
+
+    store_pdf(object_key, content)
+
     submission = AssignmentSubmission(
+        id=submission_id,
         assignment_id=assignment.id,
         student_id=student.id,
-        text_response=data.get("text_response"),
+        pdf_object_key=object_key,
+        pdf_filename=filename,
         submitted_at=now,
         is_late=is_late,
         resubmission_count=0,
@@ -639,6 +700,7 @@ def submit_assignment(
 
     except IntegrityError as exc:
         db.session.rollback()
+        _delete_pdf_object(object_key)
 
         raise AssignmentConflictError(
             "A submission already exists for this assignment."
@@ -646,26 +708,23 @@ def submit_assignment(
 
     except Exception:
         db.session.rollback()
+        _delete_pdf_object(object_key)
         raise
 
 
-def resubmit_assignment(
+def resubmit_pdf_assignment(
     submission_id,
-    data,
+    upload,
     actor_user_id,
 ):
-    submission = get_submission_by_id(
-        submission_id
-    )
+    submission = get_submission_by_id(submission_id)
 
     if submission is None:
         raise SubmissionNotFoundError(
             "Assignment submission not found."
         )
 
-    student = _student_for_user(
-        actor_user_id
-    )
+    student = _student_for_user(actor_user_id)
 
     if student is None or submission.student_id != student.id:
         raise AssignmentAccessDeniedError(
@@ -674,7 +733,6 @@ def resubmit_assignment(
 
     assignment = submission.assignment
 
-    # Verify that the student is still actively enrolled.
     if _get_student_enrollment(
         student.id,
         assignment.offering_id,
@@ -688,42 +746,58 @@ def resubmit_assignment(
             "Resubmissions are not allowed for this assignment."
         )
 
-    if assignment.status != "PUBLISHED":
-        raise AssignmentValidationError(
-            "Only PUBLISHED assignments accept submissions."
-        )
-
-    now = _now()
-
-    if now < assignment.available_from:
-        raise AssignmentValidationError(
-            "This assignment is not available yet."
-        )
-
-    is_late = now > assignment.due_at
-
-    if is_late and not assignment.allow_late_submissions:
-        raise AssignmentValidationError(
-            "The submission deadline has passed."
-        )
-
     if submission.status == "GRADED":
         raise AssignmentValidationError(
             "A graded submission cannot be resubmitted."
         )
 
-    submission.text_response = data["text_response"]
+    now, is_late = _submission_window(assignment, student)
+    filename, content = _read_assignment_pdf(upload)
+    object_key = (
+        f"assignment-submissions/{assignment.id}/"
+        f"{student.id}/{uuid4()}.pdf"
+    )
+
+    store_pdf(object_key, content)
+
+    previous_pdf_key = submission.pdf_object_key
+    submission.pdf_object_key = object_key
+    submission.pdf_filename = filename
     submission.submitted_at = now
     submission.is_late = is_late
     submission.resubmission_count += 1
 
     try:
         commit_changes()
-        return submission
-
     except Exception:
         db.session.rollback()
+        _delete_pdf_object(object_key)
         raise
+
+    _delete_pdf_object(previous_pdf_key)
+    return submission
+
+
+def get_pdf_download_url(
+    submission_id,
+    actor_user_id,
+    actor_role,
+):
+    submission = get_submission_for_user(
+        submission_id,
+        actor_user_id,
+        actor_role,
+    )
+
+    if not submission.pdf_object_key or not submission.pdf_filename:
+        raise AssignmentFileNotFoundError(
+            "This submission does not have a PDF file."
+        )
+
+    return create_pdf_download_url(
+        submission.pdf_object_key,
+        submission.pdf_filename,
+    )
 
 
 def list_assignment_submissions(

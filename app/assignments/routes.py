@@ -1,3 +1,4 @@
+from flask import redirect
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from flask_jwt_extended import get_jwt_identity
@@ -10,8 +11,7 @@ from app.assignments.schemas import (
     AssignmentQuerySchema,
     MyAssignmentQuerySchema,
     SubmissionQuerySchema,
-    SubmissionCreateSchema,
-    SubmissionUpdateSchema,
+    SubmissionPDFUploadSchema,
     SubmissionGradeSchema,
     AssignmentResponseSchema,
     SubmissionResponseSchema,
@@ -26,10 +26,11 @@ from app.assignments.service import (
     get_assignment_for_user,
     list_assignments_for_user,
     list_my_assignments,
-    submit_assignment,
-    resubmit_assignment,
+    submit_pdf_assignment,
+    resubmit_pdf_assignment,
     list_assignment_submissions,
     get_submission_for_user,
+    get_pdf_download_url,
     grade_submission,
     AssignmentNotFoundError,
     SubmissionNotFoundError,
@@ -37,7 +38,9 @@ from app.assignments.service import (
     AssignmentAccessDeniedError,
     AssignmentValidationError,
     AssignmentConflictError,
+    AssignmentFileNotFoundError,
 )
+from app.assignments.storage import AssignmentStorageError
 
 
 blp = Blueprint(
@@ -79,6 +82,12 @@ def _handle_error(exc):
 
     if isinstance(exc, AssignmentValidationError):
         abort(422, message=str(exc))
+
+    if isinstance(exc, AssignmentFileNotFoundError):
+        abort(404, message=str(exc))
+
+    if isinstance(exc, AssignmentStorageError):
+        abort(503, message=str(exc))
 
     raise exc
 
@@ -235,23 +244,6 @@ class AssignmentStatusResource(MethodView):
 class AssignmentSubmissionCollectionResource(MethodView):
 
     @blp.doc(
-        summary="Submit work for an assignment",
-        security=[{"bearerAuth": []}],
-    )
-    @blp.arguments(SubmissionCreateSchema)
-    @blp.response(201, SubmissionResponseSchema)
-    @role_required("STUDENT")
-    def post(self, data, assignment_id):
-        try:
-            return submit_assignment(
-                assignment_id,
-                data,
-                get_jwt_identity(),
-            )
-        except Exception as exc:
-            _handle_error(exc)
-
-    @blp.doc(
         summary="List submissions for an assignment",
         security=[{"bearerAuth": []}],
     )
@@ -270,6 +262,43 @@ class AssignmentSubmissionCollectionResource(MethodView):
                 page=query_args["page"],
                 per_page=query_args["per_page"],
                 status=query_args.get("status"),
+            )
+        except Exception as exc:
+            _handle_error(exc)
+
+
+@blp.route("/<uuid:assignment_id>/submissions/pdf")
+class AssignmentPDFSubmissionResource(MethodView):
+
+    @blp.doc(
+        summary="Submit a PDF for an assignment",
+        description=(
+            "Send multipart/form-data with the required `file` field. "
+            "Only PDFs up to 2 MiB are accepted."
+        ),
+        security=[{"bearerAuth": []}],
+        responses={
+            401: {"description": "Authentication is required."},
+            403: {"description": "Only enrolled students may submit."},
+            404: {"description": "The assignment was not found."},
+            409: {"description": "A submission already exists."},
+            413: {"description": "The request exceeds the 3 MiB request limit."},
+            422: {"description": "The PDF or submission window is invalid."},
+            503: {"description": "PDF storage is unavailable."},
+        },
+    )
+    @blp.arguments(
+        SubmissionPDFUploadSchema,
+        location="files",
+    )
+    @blp.response(201, SubmissionResponseSchema)
+    @role_required("STUDENT")
+    def post(self, data, assignment_id):
+        try:
+            return submit_pdf_assignment(
+                assignment_id,
+                data["file"],
+                get_jwt_identity(),
             )
         except Exception as exc:
             _handle_error(exc)
@@ -294,18 +323,61 @@ class AssignmentSubmissionDetailResource(MethodView):
         except Exception as exc:
             _handle_error(exc)
 
+@blp.route("/submissions/<uuid:submission_id>/pdf")
+class AssignmentSubmissionPDFResource(MethodView):
+
     @blp.doc(
-        summary="Resubmit assignment work",
+        summary="Download a submitted PDF",
         security=[{"bearerAuth": []}],
+        responses={
+            302: {
+                "description": (
+                    "Redirects to a temporary R2 download URL."
+                )
+            }
+        },
     )
-    @blp.arguments(SubmissionUpdateSchema)
+    @role_required("ADMIN", "FACULTY", "STUDENT")
+    def get(self, submission_id):
+        try:
+            url = get_pdf_download_url(
+                submission_id,
+                get_jwt_identity(),
+                _actor_role(),
+            )
+            response = redirect(url, code=302)
+            response.headers["Cache-Control"] = "no-store"
+            return response
+        except Exception as exc:
+            _handle_error(exc)
+
+    @blp.doc(
+        summary="Resubmit a PDF for an assignment",
+        description=(
+            "Send multipart/form-data with the required `file` field. "
+            "Resubmission must be enabled for the assignment."
+        ),
+        security=[{"bearerAuth": []}],
+        responses={
+            401: {"description": "Authentication is required."},
+            403: {"description": "Only the submission owner may resubmit."},
+            404: {"description": "The submission was not found."},
+            413: {"description": "The request exceeds the 3 MiB request limit."},
+            422: {"description": "The PDF or resubmission rules are invalid."},
+            503: {"description": "PDF storage is unavailable."},
+        },
+    )
+    @blp.arguments(
+        SubmissionPDFUploadSchema,
+        location="files",
+    )
     @blp.response(200, SubmissionResponseSchema)
     @role_required("STUDENT")
     def patch(self, data, submission_id):
         try:
-            return resubmit_assignment(
+            return resubmit_pdf_assignment(
                 submission_id,
-                data,
+                data["file"],
                 get_jwt_identity(),
             )
         except Exception as exc:

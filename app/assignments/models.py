@@ -138,6 +138,16 @@ class AssignmentSubmission(UUIDMixin, BaseModel):
         nullable=True,
     )
 
+    pdf_object_key = db.Column(
+        db.String(500),
+        nullable=True,
+    )
+
+    pdf_filename = db.Column(
+        db.String(255),
+        nullable=True,
+    )
+
     submitted_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
