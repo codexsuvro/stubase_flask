@@ -2,7 +2,6 @@ from marshmallow import (
     Schema,
     fields,
     validate,
-    validates,
     validates_schema,
     ValidationError,
 )
@@ -14,30 +13,23 @@ MAX_TEXT_LENGTH = 10000
 
 
 class NonBlankSchema(Schema):
-    @validates("curriculum_code")
-    def validate_curriculum_code(self, value, **kwargs):
-        if not value.strip():
-            raise ValidationError("Value cannot contain only whitespace.")
-
-    @validates("curriculum_name")
-    def validate_curriculum_name(self, value, **kwargs):
-        if not value.strip():
-            raise ValidationError("Value cannot contain only whitespace.")
-
-    @validates("program_name")
-    def validate_program_name(self, value, **kwargs):
-        if not value.strip():
-            raise ValidationError("Value cannot contain only whitespace.")
-
-    @validates("title")
-    def validate_title(self, value, **kwargs):
-        if not value.strip():
-            raise ValidationError("Value cannot contain only whitespace.")
-
-    @validates("outcome_code")
-    def validate_outcome_code(self, value, **kwargs):
-        if not value.strip():
-            raise ValidationError("Value cannot contain only whitespace.")
+    @validates_schema
+    def validate_non_blank_fields(self, data, **kwargs):
+        non_blank_fields = (
+            "curriculum_code",
+            "curriculum_name",
+            "program_name",
+            "title",
+            "outcome_code",
+        )
+        errors = {
+            field_name: ["Value cannot contain only whitespace."]
+            for field_name in non_blank_fields
+            if data.get(field_name) is not None
+            and not data[field_name].strip()
+        }
+        if errors:
+            raise ValidationError(errors)
 
 
 class CurriculumCreateSchema(NonBlankSchema):
