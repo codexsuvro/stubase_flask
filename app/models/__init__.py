@@ -20,3 +20,12 @@ from app.models.grade_scale import GradeScale
 from app.models.course_grade import CourseGrade
 from app.faculty_workload.models import FacultyWorkloadPolicy
 from app.assignments.models import Assignment, AssignmentSubmission
+from app.curricula.models import (
+    Curriculum,
+    CurriculumCourse,
+    LearningOutcome,
+    Syllabus,
+    SyllabusTopic,
+    SyllabusUnit,
+    TopicLearningOutcome,
+)

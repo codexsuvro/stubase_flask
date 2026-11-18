@@ -72,6 +72,7 @@ def create_app():
     from app.grading.routes import blp as grading_blueprint
     from app.faculty_workload.routes import blp as faculty_workload_blueprint
     from app.assignments.routes import blp as assignments_blueprint
+    from app.curricula.routes import blp as curricula_blueprint
     
     api.register_blueprint(auth_blueprint)
     api.register_blueprint(users_blueprint)
@@ -90,6 +91,7 @@ def create_app():
     api.register_blueprint(grading_blueprint)
     api.register_blueprint(faculty_workload_blueprint)
     api.register_blueprint(assignments_blueprint)
+    api.register_blueprint(curricula_blueprint)
     
     app.cli.add_command(seed)
     

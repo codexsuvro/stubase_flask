@@ -62,6 +62,12 @@ class Department(UUIDMixin, BaseModel):
         back_populates="department",
         lazy="selectin",
     )
+
+    curriculums = db.relationship(
+        "Curriculum",
+        back_populates="department",
+        lazy="selectin",
+    )
     
     def __repr__(self):
         return (

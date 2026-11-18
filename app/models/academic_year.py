@@ -48,5 +48,11 @@ class AcademicYear(UUIDMixin, BaseModel):
         cascade="all, delete-orphan",
     )
 
+    curriculums = db.relationship(
+        "Curriculum",
+        back_populates="academic_year",
+        lazy="selectin",
+    )
+
     def __repr__(self):
         return f"<AcademicYear {self.name}>"
