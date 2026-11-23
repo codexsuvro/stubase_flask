@@ -17,6 +17,13 @@ class Config:
     R2_SIGNED_URL_TTL_SECONDS = 300
     ASSIGNMENT_PDF_MAX_BYTES = 2 * 1024 * 1024
     MAX_CONTENT_LENGTH = 3 * 1024 * 1024
+    MAIL_SERVER = os.getenv("MAIL_SERVER")
+    MAIL_PORT = os.getenv("MAIL_PORT", "587")
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true")
+    MAIL_FROM_ADDRESS = os.getenv("MAIL_FROM_ADDRESS")
+    MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "StuBase")
     
     # ======================
     # JWT Configuration

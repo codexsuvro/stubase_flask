@@ -21,7 +21,7 @@ Rather than being a basic CRUD application, StuBase is being developed as an ent
 - [Implemented Modules](#implemented-modules)
 - [API Documentation](#api-documentation)
 - [Getting Started](#getting-started)
-- [API Testing and Validation](#api-testing-and-validation)
+- [API Testing](#api-testing)
 - [Development Progress](#development-progress)
 - [Engineering Practices](#engineering-practices)
 - [Roadmap](#roadmap)
@@ -84,7 +84,15 @@ Rather than being a basic CRUD application, StuBase is being developed as an ent
 - JSON and PDF transcript output.
 - Academic progress and dashboard information.
 
-### 6. API Engineering
+### 6. Notifications and Announcements
+
+- Global and course-offering announcements.
+- Draft, publish, and archive lifecycle.
+- Role- and enrollment-scoped visibility.
+- In-app notification inbox and unread counts.
+- Durable email delivery queue with retry tracking.
+
+### 7. API Engineering
 
 - RESTful API architecture.
 - UUID-based primary keys.
@@ -191,9 +199,17 @@ stubase_flask/
 │   ├── assessments/
 │   ├── results/
 │   ├── dashboard/
+│   ├── academic_calendar/
+│   ├── course_offerings/
+│   ├── timetable/
+│   ├── course_prerequisites/
+│   ├── waitlists/
+│   ├── grading/
+│   ├── faculty_workload/
 │   ├── assignments/
-│   ├── transcripts/
 │   ├── curricula/
+│   ├── notifications/
+│   ├── announcements/
 │   │
 │   ├── models/
 │   ├── seeds/
@@ -206,7 +222,6 @@ stubase_flask/
 ├── migrations/
 │   └── versions/
 │
-├── .env
 ├── .gitignore
 ├── requirements.txt
 ├── run.py
@@ -282,6 +297,9 @@ The database design follows a structured relational approach with UUID-based pri
 - SyllabusTopic
 - LearningOutcome
 - TopicLearningOutcome
+- Announcement
+- Notification
+- NotificationDelivery
 - Token Blocklist
 
 ### Database Engineering Practices
@@ -323,6 +341,11 @@ The following modules have been implemented as part of the current development r
 | Student Transcripts (JSON/PDF) | Implemented |
 | Curriculum Management | Implemented |
 | Syllabus Management | Implemented |
+| Timetable and Scheduling | Implemented |
+| Course Prerequisites and Waitlists | Implemented |
+| Grading, GPA/CGPA, and Transcripts | Implemented |
+| Faculty Workload Tracking | Implemented |
+| Notifications and Announcements | Implemented |
 
 ### Curriculum and Syllabus Management
 
@@ -370,6 +393,36 @@ Implemented capabilities include:
 - Preservation of legacy text submission data.
 
 The current application configuration sets a maximum PDF size of 2 MiB.
+
+### Notifications and Announcements
+
+Announcements can be created as drafts, published to a global audience or a
+specific course offering, and archived. Administrators can publish global
+announcements; faculty can manage announcements for their assigned offerings.
+Students see course announcements only while enrolled in the offering.
+
+Publishing creates in-app notifications for active recipients and queues email
+deliveries for verified accounts. Email delivery uses a durable database queue
+with retries; configure SMTP settings and run the dispatcher with:
+
+```bash
+flask --app run.py dispatch-notification-emails --limit 50
+```
+
+The dispatcher can be run manually or scheduled. It can later be invoked by
+Celery without changing the notification API.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/notifications/me` | List the authenticated user's notifications |
+| GET | `/notifications/me/unread-count` | Get unread notification count |
+| PATCH | `/notifications/{notification_id}/read` | Mark one notification as read |
+| PATCH | `/notifications/me/read-all` | Mark all notifications as read |
+| GET | `/announcements` | List announcements visible to the authenticated user |
+| POST | `/announcements` | Create a draft announcement |
+| GET/PATCH | `/announcements/{announcement_id}` | Get an announcement or update a draft |
+| POST | `/announcements/{announcement_id}/publish` | Publish and notify recipients |
+| POST | `/announcements/{announcement_id}/archive` | Archive an announcement |
 
 ---
 
@@ -455,9 +508,20 @@ R2_ENDPOINT_URL=https://your-account-id.r2.cloudflarestorage.com
 R2_ACCESS_KEY_ID=your-r2-access-key-id
 R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
 R2_BUCKET_NAME=stubase-assignment-submissions
+
+MAIL_SERVER=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=your-smtp-username
+MAIL_PASSWORD=your-smtp-password
+MAIL_USE_TLS=true
+MAIL_FROM_ADDRESS=notifications@example.com
+MAIL_FROM_NAME=StuBase
 ```
 
 Replace the database credentials with your local PostgreSQL configuration.
+SMTP settings are required only when dispatching queued email notifications.
+Keep SMTP credentials in the local `.env` file or deployment secret store; do
+not commit them.
 Assignment PDFs are uploaded to a private Cloudflare R2 bucket. R2 uses the
 S3-compatible endpoint derived from `R2_ACCOUNT_ID`; set `R2_ENDPOINT_URL`
 instead if using a custom endpoint. The PDF upload limit is 2 MiB. The
@@ -519,7 +583,8 @@ Open Swagger UI to explore and test the available APIs.
 
 ## API Testing
 
-API endpoints are currently validated using Postman. The automated Pytest suite is planned after feature development is complete.
+API endpoints are manually validated using Postman. The automated Pytest
+suite is planned after feature development is complete.
 
 ### Assessment Module Validation
 
@@ -536,12 +601,6 @@ Verified validation scenarios include:
 | Empty PATCH request | 422 Unprocessable Entity |
 
 Additional negative-test scenarios have also been verified during development.
-
-Run the automated test suite using:
-
-```bash
-pytest
-```
 
 ---
 
@@ -562,7 +621,7 @@ StuBase is actively under development. The following table reflects the current 
 | Faculty workload tracking | Implemented |
 | Assignments and PDF submissions using Cloudflare R2 | Implemented |
 | Curriculum and syllabus management | Implemented |
-| Notifications and announcements | Pending |
+| Notifications and announcements | Implemented |
 | Fees, concessions, invoices, dues, and financial reports | Pending |
 | Advanced analytics, at-risk insights, and ML prediction | Pending |
 | Docker, background jobs, health checks, and production infrastructure | Pending |
@@ -595,7 +654,7 @@ The project emphasizes practical software engineering principles:
 
 Remaining work is planned in these phases:
 
-1. Institutional operations: notifications, announcements, and finance.
+1. Institutional operations: fee structures, concessions, invoices, dues, and financial reports. Notifications and announcements are implemented.
 2. Analytics: dashboard KPI extensions, exports, at-risk analysis, and dropout-risk prediction.
 3. Production infrastructure: Docker, Redis/Celery, health checks, caching, rate limiting, and environment configuration.
 4. Engineering quality and delivery: automated tests after feature development, CI/CD, observability, load testing, and deployment.
