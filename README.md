@@ -321,7 +321,7 @@ R2_BUCKET_NAME=your-private-bucket-name
 Replace the database credentials with your local PostgreSQL configuration.
 Assignment PDFs are uploaded to a private Cloudflare R2 bucket. R2 uses the
 S3-compatible endpoint derived from `R2_ACCOUNT_ID`; set `R2_ENDPOINT_URL`
-instead if using a custom endpoint. The PDF upload limit is 10 MiB. The
+instead if using a custom endpoint. The PDF upload limit is 2 MiB. The
 application returns a temporary, authorization-checked download redirect.
 Create the bucket as private and use an R2 API token scoped to that bucket with
 object read/write permissions.
@@ -385,7 +385,7 @@ Open Swagger UI to explore and test the available APIs.
 
 ## API Testing
 
-API endpoints are tested using Postman, with automated testing through Pytest being developed alongside the application.
+API endpoints are currently validated using Postman. The automated Pytest suite is planned after feature development is complete.
 
 ### Assessment Module Validation
 
@@ -403,40 +403,31 @@ Verified validation scenarios include:
 
 Additional negative-test scenarios have also been verified during development.
 
-Run the automated test suite using:
-
-```bash
-pytest
-```
-
 ---
 
 ## Development Progress
 
-StuBase is actively under development. The following table represents the current implementation status.
+StuBase is actively under development. The following table reflects the current implementation status.
 
 | Component | Status |
 |---|---|
-| Application Factory and Configuration | Implemented |
-| PostgreSQL Integration | Implemented |
-| UUID-based Database Models | Implemented |
-| Alembic Database Migrations | Implemented |
-| Role and Administrator Seeding | Implemented |
-| JWT Authentication | Implemented |
-| Token Refresh and Revocation | Implemented |
-| Password Management | Implemented |
-| Role-Based Authorization Foundation | Implemented |
-| Assessment CRUD | Implemented |
-| Assessment Pagination and Filtering | Implemented |
-| Assessment Validation | Implemented |
-| Student and Faculty Management | In Development |
-| Department and HOD Management | In Development |
-| Course and Enrollment Management | In Development |
-| Attendance Management | In Development |
-| Results Management | In Development |
-| Dashboard APIs | Planned |
-| Expanded Automated Testing | In Progress |
-| Deployment and CI/CD | Planned |
+| Authentication, security hardening, and RBAC | Implemented |
+| Students, faculty, departments, and courses | Implemented |
+| Academic years, semesters, and course offerings | Implemented |
+| Enrollments, attendance, assessments, and results | Implemented |
+| Role-based dashboards | Implemented |
+| Timetable and scheduling conflict checks | Implemented |
+| Course prerequisites and waitlists | Implemented |
+| Grading, GPA/CGPA, and transcript PDFs | Implemented |
+| Faculty workload tracking | Implemented |
+| Assignments and PDF submissions using Cloudflare R2 | Implemented |
+| Curriculum and syllabus management | Implemented |
+| Notifications and announcements | Pending |
+| Fees, concessions, invoices, dues, and financial reports | Pending |
+| Advanced analytics, at-risk insights, and ML prediction | Pending |
+| Docker, background jobs, health checks, and production infrastructure | Pending |
+| Automated test suite | Planned after feature development |
+| CI/CD, observability, load testing, and deployment | Pending |
 
 *Implementation status reflects ongoing development and does not indicate complete production readiness.*
 
@@ -460,20 +451,12 @@ The project emphasizes practical software engineering principles:
 
 ## Roadmap
 
-Planned enhancements include:
+Remaining work is planned in these phases:
 
-- Complete student lifecycle management.
-- Advanced faculty and HOD assignment workflows.
-- Comprehensive course and enrollment management.
-- Attendance tracking and reporting.
-- Academic grading and results processing.
-- Fine-grained permission management.
-- Audit logging and administrative activity tracking.
-- Advanced dashboard and analytics APIs.
-- Expanded unit and integration testing.
-- Docker-based containerization.
-- CI/CD pipeline implementation.
-- Cloud deployment and production monitoring.
+1. Institutional operations: notifications, announcements, and finance.
+2. Analytics: dashboard KPI extensions, exports, at-risk analysis, and dropout-risk prediction.
+3. Production infrastructure: Docker, Redis/Celery, health checks, caching, rate limiting, and environment configuration.
+4. Engineering quality and delivery: automated tests after feature development, CI/CD, observability, load testing, and deployment.
 
 ---
 
