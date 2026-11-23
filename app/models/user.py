@@ -71,6 +71,13 @@ class User(UUIDMixin, BaseModel):
         uselist=False,
         lazy="selectin",
     )
+
+    notifications = db.relationship(
+        "Notification",
+        back_populates="recipient",
+        lazy="select",
+        cascade="all, delete-orphan",
+    )
     
     graded_assessment_results = db.relationship(
         "AssessmentResult",

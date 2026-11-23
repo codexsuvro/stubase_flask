@@ -73,6 +73,8 @@ def create_app():
     from app.faculty_workload.routes import blp as faculty_workload_blueprint
     from app.assignments.routes import blp as assignments_blueprint
     from app.curricula.routes import blp as curricula_blueprint
+    from app.notifications.routes import blp as notifications_blueprint
+    from app.announcements.routes import blp as announcements_blueprint
     
     api.register_blueprint(auth_blueprint)
     api.register_blueprint(users_blueprint)
@@ -92,8 +94,42 @@ def create_app():
     api.register_blueprint(faculty_workload_blueprint)
     api.register_blueprint(assignments_blueprint)
     api.register_blueprint(curricula_blueprint)
+    api.register_blueprint(notifications_blueprint)
+    api.register_blueprint(announcements_blueprint)
     
     app.cli.add_command(seed)
+
+    @app.cli.command("dispatch-notification-emails")
+    @click.option(
+        "--limit",
+        type=click.IntRange(min=1, max=500),
+        default=50,
+        show_default=True,
+        help="Maximum number of queued messages to process.",
+    )
+    def dispatch_notification_emails(limit):
+        """Send queued notification emails and update delivery status."""
+        from app.notifications.delivery import (
+            NotificationEmailConfigurationError,
+            dispatch_pending_email_deliveries,
+        )
+
+        try:
+            counts = dispatch_pending_email_deliveries(limit=limit)
+        except NotificationEmailConfigurationError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+        click.echo(
+            "Notification email dispatch complete: "
+            f"{counts['sent']} sent, "
+            f"{counts['retrying']} retrying, "
+            f"{counts['failed']} failed."
+        )
+        if counts["retrying"] or counts["failed"]:
+            raise click.ClickException(
+                "Some notification emails were not delivered; "
+                "inspect the notification delivery records before retrying."
+            )
     
     @app.cli.command("cleanup-revoked-tokens")
     def cleanup_revoked_tokens():

@@ -29,3 +29,5 @@ from app.curricula.models import (
     SyllabusUnit,
     TopicLearningOutcome,
 )
+from app.announcements.models import Announcement
+from app.notifications.models import Notification, NotificationDelivery
