@@ -75,6 +75,7 @@ def create_app():
     from app.curricula.routes import blp as curricula_blueprint
     from app.notifications.routes import blp as notifications_blueprint
     from app.announcements.routes import blp as announcements_blueprint
+    from app.finance.routes import blp as finance_blueprint
     
     api.register_blueprint(auth_blueprint)
     api.register_blueprint(users_blueprint)
@@ -96,6 +97,7 @@ def create_app():
     api.register_blueprint(curricula_blueprint)
     api.register_blueprint(notifications_blueprint)
     api.register_blueprint(announcements_blueprint)
+    api.register_blueprint(finance_blueprint)
     
     app.cli.add_command(seed)
 

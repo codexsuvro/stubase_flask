@@ -31,3 +31,8 @@ from app.curricula.models import (
 )
 from app.announcements.models import Announcement
 from app.notifications.models import Notification, NotificationDelivery
+from app.finance.models import (
+    FeeStructure,
+    FeeStructureItem,
+    StudentFeeCharge,
+)

@@ -92,7 +92,13 @@ Rather than being a basic CRUD application, StuBase is being developed as an ent
 - In-app notification inbox and unread counts.
 - Durable email delivery queue with retry tracking.
 
-### 7. API Engineering
+### 7. Finance
+
+- Versioned fee structures by department and semester, optionally scoped to a course offering.
+- Draft editing, activation, archival, and currency-aware fee components.
+- Idempotent application to enrolled students with immutable charge snapshots and audited voiding.
+
+### 8. API Engineering
 
 - RESTful API architecture.
 - UUID-based primary keys.
@@ -210,6 +216,7 @@ stubase_flask/
 │   ├── curricula/
 │   ├── notifications/
 │   ├── announcements/
+│   ├── finance/
 │   │
 │   ├── models/
 │   ├── seeds/
@@ -300,6 +307,9 @@ The database design follows a structured relational approach with UUID-based pri
 - Announcement
 - Notification
 - NotificationDelivery
+- FeeStructure
+- FeeStructureItem
+- StudentFeeCharge
 - Token Blocklist
 
 ### Database Engineering Practices
@@ -346,6 +356,7 @@ The following modules have been implemented as part of the current development r
 | Grading, GPA/CGPA, and Transcripts | Implemented |
 | Faculty Workload Tracking | Implemented |
 | Notifications and Announcements | Implemented |
+| Versioned Fee Structures | Implemented |
 
 ### Curriculum and Syllabus Management
 
@@ -423,6 +434,35 @@ Celery without changing the notification API.
 | GET/PATCH | `/announcements/{announcement_id}` | Get an announcement or update a draft |
 | POST | `/announcements/{announcement_id}/publish` | Publish and notify recipients |
 | POST | `/announcements/{announcement_id}/archive` | Archive an announcement |
+
+### Finance: Fee Structures
+
+Administrators can define versioned fee schedules for a department and
+semester, optionally narrowed to a course offering. Each structure contains
+currency-aware fee components. Drafts are editable; activated versions are
+immutable, and only one version of a fee code can be active for the same
+scope. Archive an active version before activating its replacement. The
+additive schema references existing academic tables and does not alter them.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET/POST | `/finance/fee-structures` | List fee structures or create a draft |
+| GET/PATCH | `/finance/fee-structures/{fee_structure_id}` | Get details or update a draft |
+| POST | `/finance/fee-structures/{fee_structure_id}/activate` | Activate a draft |
+| POST | `/finance/fee-structures/{fee_structure_id}/archive` | Archive without deleting history |
+
+Applying an active schedule snapshots its components as open charges for
+students enrolled in the matching department and semester, or the selected
+offering. Reapplying is idempotent. Students can view only their own charges;
+administrators can list and void charges with an audit reason. Payments,
+concessions, invoices, and dues are subsequent finance work.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/finance/fee-structures/{fee_structure_id}/apply` | Apply an active schedule to eligible students |
+| GET | `/finance/charges` | Admin list of charges with filters |
+| GET | `/finance/charges/me` | Student list of their own charges |
+| POST | `/finance/charges/{charge_id}/void` | Void a charge with an audit reason |
 
 ---
 
@@ -622,7 +662,8 @@ StuBase is actively under development. The following table reflects the current 
 | Assignments and PDF submissions using Cloudflare R2 | Implemented |
 | Curriculum and syllabus management | Implemented |
 | Notifications and announcements | Implemented |
-| Fees, concessions, invoices, dues, and financial reports | Pending |
+| Versioned fee structures and student charge snapshots | Implemented |
+| Concessions, invoices, payments, dues, and financial reports | Pending |
 | Advanced analytics, at-risk insights, and ML prediction | Pending |
 | Docker, background jobs, health checks, and production infrastructure | Pending |
 | Automated test suite | Planned after feature development |
