@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from app.extensions import db
 from app.models.base import BaseModel, UUIDMixin
 
@@ -444,3 +446,130 @@ class StudentFeeCharge(UUIDMixin, BaseModel):
         lazy="selectin",
     )
     voiding_user = db.relationship("User", lazy="selectin")
+    adjustments = db.relationship(
+        "FeeAdjustment",
+        back_populates="charge",
+        lazy="selectin",
+        order_by="FeeAdjustment.created_at",
+    )
+
+    @property
+    def balance_due(self):
+        if self.status != "OPEN":
+            return Decimal("0.00")
+        credits = sum(
+            (
+                adjustment.amount
+                for adjustment in self.adjustments
+                if adjustment.status == "ACTIVE"
+            ),
+            Decimal("0.00"),
+        )
+        return max(self.amount - credits, Decimal("0.00"))
+
+
+class FeeAdjustment(UUIDMixin, BaseModel):
+    __tablename__ = "fee_adjustments"
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "amount > 0",
+            name="ck_fee_adjustment_amount",
+        ),
+        db.CheckConstraint(
+            "kind IN ('SCHOLARSHIP', 'CONCESSION')",
+            name="ck_fee_adjustment_kind",
+        ),
+        db.CheckConstraint(
+            "(kind = 'SCHOLARSHIP' AND scholarship_award_id IS NOT NULL) OR "
+            "(kind = 'CONCESSION' AND scholarship_award_id IS NULL)",
+            name="ck_fee_adjustment_source",
+        ),
+        db.CheckConstraint(
+            "status IN ('ACTIVE', 'VOID')",
+            name="ck_fee_adjustment_status",
+        ),
+        db.CheckConstraint(
+            "(status = 'VOID' AND voided_at IS NOT NULL "
+            "AND voided_by IS NOT NULL AND void_reason IS NOT NULL "
+            "AND length(trim(void_reason)) > 0) OR "
+            "(status = 'ACTIVE' AND voided_at IS NULL "
+            "AND voided_by IS NULL AND void_reason IS NULL)",
+            name="ck_fee_adjustment_void_state",
+        ),
+        db.CheckConstraint(
+            "length(trim(reason)) > 0",
+            name="ck_fee_adjustment_reason_nonblank",
+        ),
+        db.Index(
+            "uq_fee_adjustment_active_award_charge",
+            "scholarship_award_id",
+            "charge_id",
+            unique=True,
+            postgresql_where=db.text(
+                "scholarship_award_id IS NOT NULL AND status = 'ACTIVE'"
+            ),
+            sqlite_where=db.text(
+                "scholarship_award_id IS NOT NULL AND status = 'ACTIVE'"
+            ),
+        ),
+        db.Index(
+            "ix_fee_adjustment_charge_status",
+            "charge_id",
+            "status",
+        ),
+    )
+
+    charge_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("student_fee_charges.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    scholarship_award_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("scholarship_awards.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    kind = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    reason = db.Column(db.String(1000), nullable=False)
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="ACTIVE",
+        server_default="ACTIVE",
+    )
+    created_by = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    voided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    voided_by = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    void_reason = db.Column(db.String(500), nullable=True)
+
+    charge = db.relationship(
+        "StudentFeeCharge",
+        back_populates="adjustments",
+        lazy="selectin",
+    )
+    scholarship_award = db.relationship(
+        "ScholarshipAward",
+        lazy="selectin",
+    )
+    creator = db.relationship(
+        "User",
+        foreign_keys=[created_by],
+        lazy="selectin",
+    )
+    voiding_user = db.relationship(
+        "User",
+        foreign_keys=[voided_by],
+        lazy="selectin",
+    )

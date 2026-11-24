@@ -76,6 +76,7 @@ def create_app():
     from app.notifications.routes import blp as notifications_blueprint
     from app.announcements.routes import blp as announcements_blueprint
     from app.finance.routes import blp as finance_blueprint
+    from app.scholarships.routes import blp as scholarships_blueprint
     
     api.register_blueprint(auth_blueprint)
     api.register_blueprint(users_blueprint)
@@ -98,6 +99,7 @@ def create_app():
     api.register_blueprint(notifications_blueprint)
     api.register_blueprint(announcements_blueprint)
     api.register_blueprint(finance_blueprint)
+    api.register_blueprint(scholarships_blueprint)
     
     app.cli.add_command(seed)
 
