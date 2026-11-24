@@ -310,6 +310,11 @@ The database design follows a structured relational approach with UUID-based pri
 - FeeStructure
 - FeeStructureItem
 - StudentFeeCharge
+- FeeAdjustment
+- ScholarshipProgram
+- ScholarshipApplication
+- ScholarshipApplicationDocument
+- ScholarshipAward
 - Token Blocklist
 
 ### Database Engineering Practices
@@ -443,6 +448,9 @@ currency-aware fee components. Drafts are editable; activated versions are
 immutable, and only one version of a fee code can be active for the same
 scope. Archive an active version before activating its replacement. The
 additive schema references existing academic tables and does not alter them.
+Charges retain their original amount; scholarships and concessions are
+recorded as separate auditable adjustments that determine the remaining
+balance.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -454,8 +462,7 @@ additive schema references existing academic tables and does not alter them.
 Applying an active schedule snapshots its components as open charges for
 students enrolled in the matching department and semester, or the selected
 offering. Reapplying is idempotent. Students can view only their own charges;
-administrators can list and void charges with an audit reason. Payments,
-concessions, invoices, and dues are subsequent finance work.
+administrators can list and void charges with an audit reason.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -463,6 +470,48 @@ concessions, invoices, and dues are subsequent finance work.
 | GET | `/finance/charges` | Admin list of charges with filters |
 | GET | `/finance/charges/me` | Student list of their own charges |
 | POST | `/finance/charges/{charge_id}/void` | Void a charge with an audit reason |
+
+### Scholarships and Concessions
+
+Administrators create and publish scholarship programs for an academic year,
+optionally scoped to a semester and department. Programs may specify a minimum
+CGPA, application window, fixed or percentage award, recipient or budget
+limits, and an optional percentage cap. Students can view programs for which
+they meet the published enrollment and CGPA requirements, apply once, and
+withdraw while the application is pending. Administrators review applications
+and record approved awards or rejection reasons. Approved awards are applied
+to matching open charges as separate fee adjustments; original charges are not
+overwritten. Administrators may also grant direct concessions against an open
+charge. Applicants may
+attach up to five private PDF supporting documents (2 MiB each). All
+adjustments can be voided with an audit reason; voiding a charge also voids its
+active adjustments so the balance and award allocation remain consistent.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET/POST | `/scholarships/programs` | Admin list/create programs |
+| GET/PATCH | `/scholarships/programs/{program_id}` | Get/update a draft program |
+| GET | `/scholarships/programs/open` | Student list of eligible open programs |
+| POST | `/scholarships/programs/{program_id}/open` | Open applications |
+| POST | `/scholarships/programs/{program_id}/close` | Close applications |
+| POST | `/scholarships/programs/{program_id}/archive` | Archive a closed program |
+| POST | `/scholarships/programs/{program_id}/applications` | Student submits application |
+| GET | `/scholarships/applications/me` | Student list of own applications |
+| GET | `/scholarships/applications` | Admin list/review queue |
+| GET | `/scholarships/applications/{application_id}` | Get own application or admin review |
+| POST | `/scholarships/applications/{application_id}/documents` | Student uploads a supporting PDF |
+| GET | `/scholarships/applications/{application_id}/documents` | List document metadata |
+| GET | `/scholarships/applications/{application_id}/documents/{document_id}` | Download via short-lived private URL |
+| POST | `/scholarships/applications/{application_id}/withdraw` | Student withdraws a pending application |
+| POST | `/scholarships/applications/{application_id}/approve` | Admin approves and sets award value |
+| POST | `/scholarships/applications/{application_id}/reject` | Admin rejects with a reason |
+| GET | `/scholarships/awards/me` | Student list of own awards |
+| GET | `/scholarships/awards` | Admin list of awards |
+| POST | `/scholarships/awards/{award_id}/apply` | Apply an award to eligible open charges |
+| POST | `/scholarships/awards/{award_id}/revoke` | Revoke award and void its active adjustments |
+| POST | `/scholarships/concessions` | Admin grants a direct concession |
+| GET | `/scholarships/adjustments` | Admin lists scholarship/concession credits |
+| POST | `/scholarships/adjustments/{adjustment_id}/void` | Admin voids a credit with a reason |
 
 ---
 
@@ -663,7 +712,8 @@ StuBase is actively under development. The following table reflects the current 
 | Curriculum and syllabus management | Implemented |
 | Notifications and announcements | Implemented |
 | Versioned fee structures and student charge snapshots | Implemented |
-| Concessions, invoices, payments, dues, and financial reports | Pending |
+| Scholarship applications, awards, and auditable concessions | Implemented |
+| Invoices, payments, dues, and financial reports | Pending |
 | Advanced analytics, at-risk insights, and ML prediction | Pending |
 | Docker, background jobs, health checks, and production infrastructure | Pending |
 | Automated test suite | Planned after feature development |

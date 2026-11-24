@@ -239,12 +239,17 @@ class FeeChargeResponseSchema(Schema):
     item_name = fields.String(dump_only=True)
     item_description = fields.String(allow_none=True, dump_only=True)
     amount = fields.Decimal(as_string=True, dump_only=True)
+    balance_due = fields.Decimal(as_string=True, dump_only=True)
     currency_code = fields.String(dump_only=True)
     due_date = fields.Date(allow_none=True, dump_only=True)
     status = fields.String(dump_only=True)
     voided_at = fields.DateTime(allow_none=True, dump_only=True)
     voided_by = fields.UUID(allow_none=True, dump_only=True)
     void_reason = fields.String(allow_none=True, dump_only=True)
+    adjustments = fields.List(
+        fields.Nested("ScholarshipFeeAdjustmentResponseSchema"),
+        dump_only=True,
+    )
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 

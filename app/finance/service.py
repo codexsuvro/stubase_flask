@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.finance.models import (
+    FeeAdjustment,
     FeeStructure,
     FeeStructureItem,
     StudentFeeCharge,
@@ -462,9 +463,23 @@ def void_fee_charge(charge_id, actor_user_id, reason):
         return charge
 
     charge.status = "VOID"
-    charge.voided_at = datetime.now(UTC)
-    charge.voided_by = UUID(str(actor_user_id))
-    charge.void_reason = reason.strip()
+    now = datetime.now(UTC)
+    actor_id = UUID(str(actor_user_id))
+    audit_reason = reason.strip()
+    charge.voided_at = now
+    charge.voided_by = actor_id
+    charge.void_reason = audit_reason
+    adjustments = db.session.scalars(
+        select(FeeAdjustment).where(
+            FeeAdjustment.charge_id == charge.id,
+            FeeAdjustment.status == "ACTIVE",
+        )
+    ).all()
+    for adjustment in adjustments:
+        adjustment.status = "VOID"
+        adjustment.voided_at = now
+        adjustment.voided_by = actor_id
+        adjustment.void_reason = audit_reason
     try:
         db.session.commit()
     except Exception:
