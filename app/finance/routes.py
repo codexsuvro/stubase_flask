@@ -1,8 +1,10 @@
+from flask import redirect
 from flask.views import MethodView
 from flask_jwt_extended import get_jwt_identity
 from flask_smorest import Blueprint, abort
 
 from app.auth.permissions import role_required
+from app.auth.repository import get_user_by_id
 from app.finance import service
 from app.finance.schemas import (
     FeeStructureCreateSchema,
@@ -17,6 +19,12 @@ from app.finance.schemas import (
     FeeChargeResponseSchema,
     FeeChargeVoidSchema,
     MyFeeChargeQuerySchema,
+    FeeInvoiceCreateSchema,
+    FeeInvoicePaginatedResponseSchema,
+    FeeInvoiceQuerySchema,
+    FeeInvoiceResponseSchema,
+    FeeInvoiceVoidSchema,
+    MyFeeInvoiceQuerySchema,
 )
 from app.finance.service import FinanceModuleError
 
@@ -34,6 +42,13 @@ def _run(operation, *args, **kwargs):
         return operation(*args, **kwargs)
     except FinanceModuleError as exc:
         abort(exc.status_code, message=str(exc))
+
+
+def _invoice_actor_role():
+    user = get_user_by_id(get_jwt_identity())
+    if user is None or user.role is None:
+        abort(401, message="Authenticated user or role was not found.")
+    return user.role.role_name.strip().upper()
 
 
 @blp.route("/fee-structures")
@@ -214,6 +229,132 @@ class FeeChargeVoidResource(MethodView):
         return _run(
             service.void_fee_charge,
             charge_id,
+            get_jwt_identity(),
+            data["reason"],
+        )
+
+
+@blp.route("/invoices")
+class FeeInvoiceCollectionResource(MethodView):
+    @blp.doc(
+        summary="Issue an invoice for selected student charges",
+        description=(
+            "Creates an immutable invoice snapshot from 1-100 OPEN fee "
+            "charges belonging to one student, semester, and currency. "
+            "The PDF is stored privately. ADMIN only."
+        ),
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(FeeInvoiceCreateSchema)
+    @blp.response(201, FeeInvoiceResponseSchema)
+    @role_required("ADMIN")
+    def post(self, data):
+        return _run(
+            service.create_invoice,
+            data,
+            get_jwt_identity(),
+        )
+
+    @blp.doc(
+        summary="List fee invoices",
+        description="Returns paginated invoices. ADMIN only.",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(FeeInvoiceQuerySchema, location="query")
+    @blp.response(200, FeeInvoicePaginatedResponseSchema)
+    @role_required("ADMIN")
+    def get(self, query):
+        return _run(
+            service.get_invoices,
+            page=query["page"],
+            per_page=query["per_page"],
+            student_id=query.get("student_id"),
+            academic_year_id=query.get("academic_year_id"),
+            semester_id=query.get("semester_id"),
+            status=query.get("status"),
+        )
+
+
+@blp.route("/invoices/me")
+class MyFeeInvoiceCollectionResource(MethodView):
+    @blp.doc(
+        summary="List the authenticated student's invoices",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(MyFeeInvoiceQuerySchema, location="query")
+    @blp.response(200, FeeInvoicePaginatedResponseSchema)
+    @role_required("STUDENT")
+    def get(self, query):
+        return _run(
+            service.get_my_invoices,
+            get_jwt_identity(),
+            page=query["page"],
+            per_page=query["per_page"],
+            academic_year_id=query.get("academic_year_id"),
+            semester_id=query.get("semester_id"),
+            status=query.get("status"),
+        )
+
+
+@blp.route("/invoices/<uuid:invoice_id>")
+class FeeInvoiceDetailResource(MethodView):
+    @blp.doc(
+        summary="Get an invoice",
+        description="Students may access only their own invoice.",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.response(200, FeeInvoiceResponseSchema)
+    @role_required("ADMIN", "STUDENT")
+    def get(self, invoice_id):
+        return _run(
+            service.get_invoice_for_user,
+            invoice_id,
+            get_jwt_identity(),
+            _invoice_actor_role(),
+        )
+
+
+@blp.route("/invoices/<uuid:invoice_id>/pdf")
+class FeeInvoicePDFResource(MethodView):
+    @blp.doc(
+        summary="Download an invoice PDF",
+        description=(
+            "Redirects to a short-lived private PDF URL after checking "
+            "invoice ownership."
+        ),
+        security=[{"bearerAuth": []}],
+        responses={302: {"description": "Redirect to the private PDF."}},
+    )
+    @role_required("ADMIN", "STUDENT")
+    def get(self, invoice_id):
+        url = _run(
+            service.get_invoice_pdf_url,
+            invoice_id,
+            get_jwt_identity(),
+            _invoice_actor_role(),
+        )
+        response = redirect(url, code=302)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+
+@blp.route("/invoices/<uuid:invoice_id>/void")
+class FeeInvoiceVoidResource(MethodView):
+    @blp.doc(
+        summary="Void an invoice",
+        description=(
+            "Voids an invoice while retaining its audit record and PDF. "
+            "Its charges may then be re-invoiced. ADMIN only."
+        ),
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(FeeInvoiceVoidSchema)
+    @blp.response(200, FeeInvoiceResponseSchema)
+    @role_required("ADMIN")
+    def post(self, data, invoice_id):
+        return _run(
+            service.void_invoice,
+            invoice_id,
             get_jwt_identity(),
             data["reason"],
         )

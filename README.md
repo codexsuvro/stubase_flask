@@ -311,6 +311,8 @@ The database design follows a structured relational approach with UUID-based pri
 - FeeStructureItem
 - StudentFeeCharge
 - FeeAdjustment
+- FeeInvoice
+- FeeInvoiceLine
 - ScholarshipProgram
 - ScholarshipApplication
 - ScholarshipApplicationDocument
@@ -471,6 +473,26 @@ administrators can list and void charges with an audit reason.
 | GET | `/finance/charges/me` | Student list of their own charges |
 | POST | `/finance/charges/{charge_id}/void` | Void a charge with an audit reason |
 
+### Finance: Invoices
+
+Administrators issue an invoice from selected open charges for one student,
+semester, and currency. Invoice lines preserve the charge description, original
+amount, applied credits, and amount due at issue time. Active invoices prevent
+their charges from being voided or having adjustments changed; void the
+invoice first to reopen those operations. Voided invoices and their private
+PDFs remain available for audit. Students can access only their own invoices.
+Payment recording and payment receipts are intentionally part of the upcoming
+payments workflow, so an invoice is not represented as a payment receipt.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/finance/invoices` | Admin issues an invoice for 1-100 selected charges |
+| GET | `/finance/invoices` | Admin lists invoices with filters |
+| GET | `/finance/invoices/me` | Student lists their own invoices |
+| GET | `/finance/invoices/{invoice_id}` | Get an invoice, with owner checks |
+| GET | `/finance/invoices/{invoice_id}/pdf` | Download the private invoice PDF |
+| POST | `/finance/invoices/{invoice_id}/void` | Void an invoice with an audit reason |
+
 ### Scholarships and Concessions
 
 Administrators create and publish scholarship programs for an academic year,
@@ -482,8 +504,8 @@ withdraw while the application is pending. Administrators review applications
 and record approved awards or rejection reasons. Approved awards are applied
 to matching open charges as separate fee adjustments; original charges are not
 overwritten. Administrators may also grant direct concessions against an open
-charge. Applicants may
-attach up to five private PDF supporting documents (2 MiB each). All
+charge. Applicants may attach up to five private PDF supporting documents
+(2 MiB each). All
 adjustments can be voided with an audit reason; voiding a charge also voids its
 active adjustments so the balance and award allocation remain consistent.
 
@@ -713,7 +735,8 @@ StuBase is actively under development. The following table reflects the current 
 | Notifications and announcements | Implemented |
 | Versioned fee structures and student charge snapshots | Implemented |
 | Scholarship applications, awards, and auditable concessions | Implemented |
-| Invoices, payments, dues, and financial reports | Pending |
+| Immutable invoice snapshots and private invoice PDFs | Implemented |
+| Payment recording and receipts, dues, and financial reports | Pending |
 | Advanced analytics, at-risk insights, and ML prediction | Pending |
 | Docker, background jobs, health checks, and production infrastructure | Pending |
 | Automated test suite | Planned after feature development |
@@ -745,7 +768,7 @@ The project emphasizes practical software engineering principles:
 
 Remaining work is planned in these phases:
 
-1. Institutional operations: fee structures, concessions, invoices, dues, and financial reports. Notifications and announcements are implemented.
+1. Institutional operations: payment recording and receipts, dues and late fees, and financial reports. Fee structures, scholarships, concessions, and invoice PDFs are implemented. Notifications and announcements are implemented.
 2. Analytics: dashboard KPI extensions, exports, at-risk analysis, and dropout-risk prediction.
 3. Production infrastructure: Docker, Redis/Celery, health checks, caching, rate limiting, and environment configuration.
 4. Engineering quality and delivery: automated tests after feature development, CI/CD, observability, load testing, and deployment.

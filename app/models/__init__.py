@@ -36,6 +36,8 @@ from app.finance.models import (
     FeeStructureItem,
     StudentFeeCharge,
     FeeAdjustment,
+    FeeInvoice,
+    FeeInvoiceLine,
 )
 from app.scholarships.models import (
     ScholarshipProgram,
