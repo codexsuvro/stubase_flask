@@ -1,23 +1,38 @@
 from datetime import UTC, datetime
-from uuid import UUID
+from decimal import Decimal
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
+from flask import current_app
 
 from app.extensions import db
 from app.finance.models import (
     FeeAdjustment,
+    FeeInvoice,
+    FeeInvoiceLine,
     FeeStructure,
     FeeStructureItem,
     StudentFeeCharge,
 )
 from app.finance.repository import (
     get_fee_charge_by_id,
+    get_invoice_by_id,
     get_fee_structure_by_id,
+    has_active_invoice_line,
     get_next_version,
     has_active_fee_structure,
+    list_invoices,
     list_fee_charges,
     list_fee_structures,
+)
+from app.finance.pdf import generate_invoice_pdf
+from app.finance.storage import (
+    InvoiceStorageError,
+    create_invoice_pdf_url,
+    delete_invoice_pdf,
+    store_invoice_pdf,
 )
 from app.models.academic_year import AcademicYear
 from app.models.course_offering import CourseOffering
@@ -25,6 +40,9 @@ from app.models.department import Department
 from app.models.enrollment import Enrollment
 from app.models.semester import Semester
 from app.models.student import Student
+
+
+MAX_INVOICE_TOTAL = Decimal("999999999999.99")
 
 
 class FinanceModuleError(Exception):
@@ -49,6 +67,26 @@ class FeeChargeConflictError(FinanceModuleError):
 
 class FeeChargeNotFoundError(FinanceModuleError):
     status_code = 404
+
+
+class FeeInvoiceNotFoundError(FinanceModuleError):
+    status_code = 404
+
+
+class FeeInvoiceConflictError(FinanceModuleError):
+    status_code = 409
+
+
+class FeeInvoiceAccessDeniedError(FinanceModuleError):
+    status_code = 403
+
+
+class FeeInvoiceStorageUnavailableError(FinanceModuleError):
+    status_code = 503
+
+
+class FeeInvoiceValidationError(FinanceModuleError):
+    status_code = 422
 
 
 def _commit_fee_structure(conflict_message):
@@ -455,12 +493,254 @@ def get_my_fee_charges(
     )
 
 
+def create_invoice(data, actor_user_id):
+    student = db.session.get(Student, data["student_id"])
+    if student is None:
+        raise FeeInvoiceNotFoundError("Student not found.")
+
+    charge_ids = data["charge_ids"]
+    charges = db.session.scalars(
+        select(StudentFeeCharge)
+        .options(selectinload(StudentFeeCharge.adjustments))
+        .where(StudentFeeCharge.id.in_(charge_ids))
+        .order_by(StudentFeeCharge.id)
+        .with_for_update()
+    ).all()
+    if len(charges) != len(charge_ids):
+        raise FeeInvoiceNotFoundError(
+            "One or more selected fee charges were not found."
+        )
+    if any(charge.student_id != student.id for charge in charges):
+        raise FeeInvoiceValidationError(
+            "All selected charges must belong to the specified student."
+        )
+    if any(charge.status != "OPEN" for charge in charges):
+        raise FeeInvoiceConflictError(
+            "Invoices can be issued only for OPEN fee charges."
+        )
+    invoiced_charge_ids = set(
+        db.session.scalars(
+            select(FeeInvoiceLine.charge_id).where(
+                FeeInvoiceLine.status == "ACTIVE",
+                FeeInvoiceLine.charge_id.in_(
+                    [charge.id for charge in charges]
+                ),
+            )
+        ).all()
+    )
+    if invoiced_charge_ids:
+        raise FeeInvoiceConflictError(
+            "One or more charges are already included in an active invoice."
+        )
+
+    first_charge = charges[0]
+    for charge in charges:
+        if (
+            charge.academic_year_id != first_charge.academic_year_id
+            or charge.semester_id != first_charge.semester_id
+            or charge.currency_code != first_charge.currency_code
+        ):
+            raise FeeInvoiceValidationError(
+                "An invoice can include charges from only one semester "
+                "and currency."
+            )
+        if charge.balance_due <= 0:
+            raise FeeInvoiceConflictError(
+                "Fully adjusted charges cannot be included in an invoice."
+            )
+
+    issued_at = datetime.now(UTC)
+    total_amount = sum(
+        (charge.balance_due for charge in charges),
+        Decimal("0.00"),
+    )
+    if total_amount > MAX_INVOICE_TOTAL:
+        raise FeeInvoiceValidationError(
+            "The invoice total exceeds the supported maximum amount."
+        )
+    due_date = data.get("due_date")
+    if due_date is None:
+        existing_due_dates = [
+            charge.due_date
+            for charge in charges
+            if charge.due_date is not None
+        ]
+        due_date = min(existing_due_dates) if existing_due_dates else None
+
+    invoice_id = uuid4()
+    pdf_object_key = f"finance/invoices/{invoice_id}.pdf"
+    invoice = FeeInvoice(
+        id=invoice_id,
+        invoice_number=(
+            f"INV-{issued_at:%Y%m%d}-{invoice_id.hex[:12].upper()}"
+        ),
+        student=student,
+        academic_year_id=first_charge.academic_year_id,
+        semester_id=first_charge.semester_id,
+        currency_code=first_charge.currency_code,
+        total_amount=total_amount,
+        issued_at=issued_at,
+        issued_by=UUID(str(actor_user_id)),
+        due_date=due_date,
+        pdf_object_key=pdf_object_key,
+        status="ISSUED",
+    )
+    invoice.lines = [
+        FeeInvoiceLine(
+            charge=charge,
+            fee_code=charge.fee_code,
+            item_code=charge.item_code,
+            item_name=charge.item_name,
+            item_description=charge.item_description,
+            gross_amount=charge.amount,
+            adjustment_amount=charge.amount - charge.balance_due,
+            amount_due=charge.balance_due,
+            status="ACTIVE",
+        )
+        for charge in charges
+    ]
+
+    db.session.add(invoice)
+    object_stored = False
+    try:
+        db.session.flush()
+        pdf_buffer = generate_invoice_pdf(invoice)
+        store_invoice_pdf(invoice.pdf_object_key, pdf_buffer.getvalue())
+        object_stored = True
+        db.session.commit()
+    except InvoiceStorageError as exc:
+        db.session.rollback()
+        raise FeeInvoiceStorageUnavailableError(str(exc)) from exc
+    except IntegrityError as exc:
+        db.session.rollback()
+        if object_stored:
+            _delete_invoice_object_after_failure(pdf_object_key)
+        raise FeeInvoiceConflictError(
+            "One or more charges were invoiced concurrently. Refresh and retry."
+        ) from exc
+    except Exception:
+        db.session.rollback()
+        if object_stored:
+            _delete_invoice_object_after_failure(pdf_object_key)
+        raise
+    return get_invoice_by_id(invoice.id)
+
+
+def _delete_invoice_object_after_failure(object_key):
+    try:
+        delete_invoice_pdf(object_key)
+    except InvoiceStorageError:
+        current_app.logger.exception(
+            "Could not remove invoice PDF object %s after a database failure.",
+            object_key,
+        )
+
+
+def get_invoices(
+    page=1,
+    per_page=20,
+    student_id=None,
+    academic_year_id=None,
+    semester_id=None,
+    status=None,
+):
+    return list_invoices(
+        page=page,
+        per_page=per_page,
+        student_id=student_id,
+        academic_year_id=academic_year_id,
+        semester_id=semester_id,
+        status=status,
+    )
+
+
+def get_my_invoices(
+    user_id,
+    page=1,
+    per_page=20,
+    academic_year_id=None,
+    semester_id=None,
+    status=None,
+):
+    student = db.session.scalar(
+        select(Student).where(Student.user_id == UUID(str(user_id)))
+    )
+    if student is None:
+        raise FeeInvoiceNotFoundError("Student profile not found.")
+    return get_invoices(
+        page=page,
+        per_page=per_page,
+        student_id=student.id,
+        academic_year_id=academic_year_id,
+        semester_id=semester_id,
+        status=status,
+    )
+
+
+def get_invoice(invoice_id):
+    invoice = get_invoice_by_id(invoice_id)
+    if invoice is None:
+        raise FeeInvoiceNotFoundError("Invoice not found.")
+    return invoice
+
+
+def get_invoice_for_user(invoice_id, user_id, role):
+    invoice = get_invoice(invoice_id)
+    if role != "ADMIN":
+        student = db.session.scalar(
+            select(Student).where(Student.user_id == UUID(str(user_id)))
+        )
+        if student is None:
+            raise FeeInvoiceNotFoundError("Student profile not found.")
+        if invoice.student_id != student.id:
+            raise FeeInvoiceAccessDeniedError(
+                "You can access only your own invoices."
+            )
+    return invoice
+
+
+def get_invoice_pdf_url(invoice_id, user_id, role):
+    invoice = get_invoice_for_user(invoice_id, user_id, role)
+    filename = f"{invoice.invoice_number}.pdf"
+    try:
+        return create_invoice_pdf_url(
+            invoice.pdf_object_key,
+            filename,
+        )
+    except InvoiceStorageError as exc:
+        raise FeeInvoiceStorageUnavailableError(str(exc)) from exc
+
+
+def void_invoice(invoice_id, actor_user_id, reason):
+    invoice = get_invoice_by_id(invoice_id, for_update=True)
+    if invoice is None:
+        raise FeeInvoiceNotFoundError("Invoice not found.")
+    if invoice.status == "VOID":
+        return invoice
+    invoice.status = "VOID"
+    invoice.voided_at = datetime.now(UTC)
+    invoice.voided_by = UUID(str(actor_user_id))
+    invoice.void_reason = reason.strip()
+    for line in invoice.lines:
+        line.status = "VOID"
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return get_invoice_by_id(invoice.id)
+
+
 def void_fee_charge(charge_id, actor_user_id, reason):
     charge = get_fee_charge_by_id(charge_id, for_update=True)
     if charge is None:
         raise FeeChargeNotFoundError("Fee charge not found.")
     if charge.status == "VOID":
         return charge
+    if has_active_invoice_line(charge.id):
+        raise FeeChargeConflictError(
+            "Void the active invoice before voiding this fee charge."
+        )
 
     charge.status = "VOID"
     now = datetime.now(UTC)

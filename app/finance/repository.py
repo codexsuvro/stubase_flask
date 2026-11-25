@@ -2,7 +2,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.extensions import db
-from app.finance.models import FeeStructure, StudentFeeCharge
+from app.finance.models import (
+    FeeInvoice,
+    FeeInvoiceLine,
+    FeeStructure,
+    StudentFeeCharge,
+)
 
 
 def get_fee_structure_by_id(fee_structure_id, for_update=False):
@@ -178,3 +183,68 @@ def list_fee_charges(
             "has_previous": page > 1,
         },
     }
+
+
+def get_invoice_by_id(invoice_id, for_update=False):
+    statement = select(FeeInvoice).where(FeeInvoice.id == invoice_id)
+    if for_update:
+        statement = statement.with_for_update()
+    return db.session.scalar(statement)
+
+
+def list_invoices(
+    page=1,
+    per_page=20,
+    student_id=None,
+    academic_year_id=None,
+    semester_id=None,
+    status=None,
+):
+    statement = select(FeeInvoice)
+    for column, value in (
+        (FeeInvoice.student_id, student_id),
+        (FeeInvoice.academic_year_id, academic_year_id),
+        (FeeInvoice.semester_id, semester_id),
+        (FeeInvoice.status, status),
+    ):
+        if value is not None:
+            statement = statement.where(column == value)
+
+    total_records = db.session.scalar(
+        select(func.count()).select_from(
+            statement.order_by(None).subquery()
+        )
+    ) or 0
+    items = db.session.scalars(
+        statement.order_by(
+            FeeInvoice.issued_at.desc(),
+            FeeInvoice.id.desc(),
+        )
+        .limit(per_page)
+        .offset((page - 1) * per_page)
+    ).all()
+    total_pages = (
+        (total_records + per_page - 1) // per_page
+        if total_records
+        else 0
+    )
+    return {
+        "items": items,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total_records": total_records,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_previous": page > 1,
+        },
+    }
+
+
+def has_active_invoice_line(charge_id):
+    return db.session.scalar(
+        select(FeeInvoiceLine.id).where(
+            FeeInvoiceLine.charge_id == charge_id,
+            FeeInvoiceLine.status == "ACTIVE",
+        )
+    ) is not None

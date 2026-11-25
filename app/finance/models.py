@@ -573,3 +573,175 @@ class FeeAdjustment(UUIDMixin, BaseModel):
         foreign_keys=[voided_by],
         lazy="selectin",
     )
+
+
+class FeeInvoice(UUIDMixin, BaseModel):
+    __tablename__ = "fee_invoices"
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('ISSUED', 'VOID')",
+            name="ck_fee_invoice_status",
+        ),
+        db.CheckConstraint(
+            "total_amount > 0",
+            name="ck_fee_invoice_total_amount",
+        ),
+        db.CheckConstraint(
+            "length(trim(invoice_number)) > 0",
+            name="ck_fee_invoice_number_nonblank",
+        ),
+        db.CheckConstraint(
+            "length(currency_code) = 3 AND currency_code = upper(currency_code)",
+            name="ck_fee_invoice_currency_code",
+        ),
+        db.CheckConstraint(
+            "(status = 'VOID' AND voided_at IS NOT NULL "
+            "AND voided_by IS NOT NULL AND void_reason IS NOT NULL "
+            "AND length(trim(void_reason)) > 0) OR "
+            "(status = 'ISSUED' AND voided_at IS NULL "
+            "AND voided_by IS NULL AND void_reason IS NULL)",
+            name="ck_fee_invoice_void_state",
+        ),
+        db.Index(
+            "ix_fee_invoice_student_period",
+            "student_id",
+            "academic_year_id",
+            "semester_id",
+            "status",
+            "issued_at",
+        ),
+    )
+
+    invoice_number = db.Column(db.String(48), nullable=False, unique=True)
+    student_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("students.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    academic_year_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("academic_years.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    semester_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("semesters.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    currency_code = db.Column(db.String(3), nullable=False)
+    total_amount = db.Column(db.Numeric(14, 2), nullable=False)
+    issued_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+    )
+    issued_by = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    due_date = db.Column(db.Date, nullable=True)
+    pdf_object_key = db.Column(db.String(500), nullable=False, unique=True)
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="ISSUED",
+        server_default="ISSUED",
+    )
+    voided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    voided_by = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    void_reason = db.Column(db.String(500), nullable=True)
+
+    student = db.relationship("Student", lazy="selectin")
+    academic_year = db.relationship("AcademicYear", lazy="selectin")
+    semester = db.relationship("Semester", lazy="selectin")
+    issuer = db.relationship(
+        "User",
+        foreign_keys=[issued_by],
+        lazy="selectin",
+    )
+    voiding_user = db.relationship(
+        "User",
+        foreign_keys=[voided_by],
+        lazy="selectin",
+    )
+    lines = db.relationship(
+        "FeeInvoiceLine",
+        back_populates="invoice",
+        lazy="selectin",
+        order_by="FeeInvoiceLine.created_at",
+    )
+
+
+class FeeInvoiceLine(UUIDMixin, BaseModel):
+    __tablename__ = "fee_invoice_lines"
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('ACTIVE', 'VOID')",
+            name="ck_fee_invoice_line_status",
+        ),
+        db.CheckConstraint(
+            "gross_amount > 0 AND adjustment_amount >= 0 "
+            "AND amount_due >= 0 AND gross_amount >= adjustment_amount "
+            "AND amount_due = gross_amount - adjustment_amount",
+            name="ck_fee_invoice_line_amounts",
+        ),
+        db.CheckConstraint(
+            "length(trim(fee_code)) > 0 AND length(trim(item_code)) > 0 "
+            "AND length(trim(item_name)) > 0",
+            name="ck_fee_invoice_line_snapshot_nonblank",
+        ),
+        db.Index(
+            "uq_fee_invoice_line_active_charge",
+            "charge_id",
+            unique=True,
+            postgresql_where=db.text("status = 'ACTIVE'"),
+            sqlite_where=db.text("status = 'ACTIVE'"),
+        ),
+        db.Index(
+            "ix_fee_invoice_line_invoice_status",
+            "invoice_id",
+            "status",
+        ),
+    )
+
+    invoice_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("fee_invoices.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    charge_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("student_fee_charges.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    fee_code = db.Column(db.String(40), nullable=False)
+    item_code = db.Column(db.String(40), nullable=False)
+    item_name = db.Column(db.String(100), nullable=False)
+    item_description = db.Column(db.Text, nullable=True)
+    gross_amount = db.Column(db.Numeric(12, 2), nullable=False)
+    adjustment_amount = db.Column(db.Numeric(12, 2), nullable=False)
+    amount_due = db.Column(db.Numeric(12, 2), nullable=False)
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="ACTIVE",
+        server_default="ACTIVE",
+    )
+
+    invoice = db.relationship(
+        "FeeInvoice",
+        back_populates="lines",
+        lazy="selectin",
+    )
+    charge = db.relationship("StudentFeeCharge", lazy="selectin")

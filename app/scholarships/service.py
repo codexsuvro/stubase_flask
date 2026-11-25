@@ -10,8 +10,15 @@ from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.assignments.storage import AssignmentStorageError, delete_pdf
-from app.finance.models import FeeAdjustment, StudentFeeCharge
-from app.finance.repository import get_fee_charge_by_id
+from app.finance.models import (
+    FeeAdjustment,
+    FeeInvoiceLine,
+    StudentFeeCharge,
+)
+from app.finance.repository import (
+    get_fee_charge_by_id,
+    has_active_invoice_line,
+)
 from app.grading.service import get_student_transcript
 from app.models.academic_year import AcademicYear
 from app.models.course_offering import CourseOffering
@@ -787,6 +794,16 @@ def apply_award(award_id):
         StudentFeeCharge.id,
     ).with_for_update()
     charges = db.session.scalars(statement).all()
+    invoiced_charge_ids = set(
+        db.session.scalars(
+            select(FeeInvoiceLine.charge_id).where(
+                FeeInvoiceLine.status == "ACTIVE",
+                FeeInvoiceLine.charge_id.in_(
+                    [charge.id for charge in charges]
+                ),
+            )
+        ).all()
+    )
 
     active_award_adjustments = db.session.scalars(
         select(FeeAdjustment).where(
@@ -815,6 +832,9 @@ def apply_award(award_id):
     skipped_charges = 0
 
     for charge in charges:
+        if charge.id in invoiced_charge_ids:
+            skipped_charges += 1
+            continue
         if charge.id in adjusted_charge_ids:
             skipped_charges += 1
             continue
@@ -883,6 +903,24 @@ def revoke_award(award_id, actor_user_id, reason):
         raise ScholarshipNotFoundError("Scholarship award not found.")
     if award.status == "REVOKED":
         return award
+    existing_adjustments = db.session.scalars(
+        select(FeeAdjustment)
+        .where(
+            FeeAdjustment.scholarship_award_id == award.id,
+            FeeAdjustment.status == "ACTIVE",
+        )
+    ).all()
+    charge_ids = sorted(
+        {adjustment.charge_id for adjustment in existing_adjustments},
+        key=str,
+    )
+    if charge_ids:
+        db.session.scalars(
+            select(StudentFeeCharge)
+            .where(StudentFeeCharge.id.in_(charge_ids))
+            .order_by(StudentFeeCharge.id)
+            .with_for_update()
+        ).all()
     adjustments = db.session.scalars(
         select(FeeAdjustment)
         .where(
@@ -891,6 +929,16 @@ def revoke_award(award_id, actor_user_id, reason):
         )
         .with_for_update()
     ).all()
+    if charge_ids:
+        if db.session.scalar(
+            select(FeeInvoiceLine.id).where(
+                FeeInvoiceLine.status == "ACTIVE",
+                FeeInvoiceLine.charge_id.in_(charge_ids),
+            )
+        ) is not None:
+            raise ScholarshipConflictError(
+                "Void the active invoice before revoking this award."
+            )
     now = datetime.now(UTC)
     actor_id = _normalize_user_id(actor_user_id)
     for adjustment in adjustments:
@@ -918,6 +966,10 @@ def create_concession(data, actor_user_id):
     if charge.status != "OPEN":
         raise ScholarshipConflictError(
             "Concessions can be applied only to OPEN fee charges."
+        )
+    if has_active_invoice_line(charge.id):
+        raise ScholarshipConflictError(
+            "Void the active invoice before changing this charge's balance."
         )
     amount = Decimal(str(data["amount"]))
     if amount > charge.balance_due:
@@ -957,6 +1009,10 @@ def void_adjustment(adjustment_id, actor_user_id, reason):
         raise ScholarshipNotFoundError("Fee adjustment not found.")
     if adjustment.status == "VOID":
         return adjustment
+    if has_active_invoice_line(charge.id):
+        raise ScholarshipConflictError(
+            "Void the active invoice before changing this charge's balance."
+        )
     adjustment.status = "VOID"
     adjustment.voided_at = datetime.now(UTC)
     adjustment.voided_by = _normalize_user_id(actor_user_id)
