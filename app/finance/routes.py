@@ -25,6 +25,12 @@ from app.finance.schemas import (
     FeeInvoiceResponseSchema,
     FeeInvoiceVoidSchema,
     MyFeeInvoiceQuerySchema,
+    FeePaymentCreateSchema,
+    FeeInvoicePaymentQuerySchema,
+    FeePaymentPaginatedResponseSchema,
+    FeePaymentQuerySchema,
+    FeePaymentResponseSchema,
+    MyFeePaymentQuerySchema,
 )
 from app.finance.service import FinanceModuleError
 
@@ -358,3 +364,111 @@ class FeeInvoiceVoidResource(MethodView):
             get_jwt_identity(),
             data["reason"],
         )
+
+
+@blp.route("/invoices/<uuid:invoice_id>/payments")
+class FeeInvoicePaymentCollectionResource(MethodView):
+    @blp.doc(
+        summary="Record a payment against an invoice",
+        description=(
+            "Records an offline/manual payment and creates its private "
+            "receipt PDF. Partial payments are supported. ADMIN only."
+        ),
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(FeePaymentCreateSchema)
+    @blp.response(201, FeePaymentResponseSchema)
+    @role_required("ADMIN")
+    def post(self, data, invoice_id):
+        return _run(
+            service.create_payment,
+            invoice_id,
+            data,
+            get_jwt_identity(),
+        )
+
+    @blp.doc(
+        summary="List payments for an invoice",
+        description=(
+            "Admins may list any invoice's payments. Students may list only "
+            "payments for their own invoices."
+        ),
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(FeeInvoicePaymentQuerySchema, location="query")
+    @blp.response(200, FeePaymentPaginatedResponseSchema)
+    @role_required("ADMIN", "STUDENT")
+    def get(self, query, invoice_id):
+        return _run(
+            service.get_invoice_payments_for_user,
+            invoice_id,
+            get_jwt_identity(),
+            _invoice_actor_role(),
+            page=query["page"],
+            per_page=query["per_page"],
+        )
+
+
+@blp.route("/payments")
+class FeePaymentCollectionResource(MethodView):
+    @blp.doc(
+        summary="List recorded payments",
+        description="Returns paginated payments with optional filters. ADMIN only.",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(FeePaymentQuerySchema, location="query")
+    @blp.response(200, FeePaymentPaginatedResponseSchema)
+    @role_required("ADMIN")
+    def get(self, query):
+        return _run(
+            service.get_payments,
+            page=query["page"],
+            per_page=query["per_page"],
+            student_id=query.get("student_id"),
+            invoice_id=query.get("invoice_id"),
+            payment_method=query.get("payment_method"),
+        )
+
+
+@blp.route("/payments/me")
+class MyFeePaymentCollectionResource(MethodView):
+    @blp.doc(
+        summary="List the authenticated student's payments",
+        description="Students may view only their own recorded payments.",
+        security=[{"bearerAuth": []}],
+    )
+    @blp.arguments(MyFeePaymentQuerySchema, location="query")
+    @blp.response(200, FeePaymentPaginatedResponseSchema)
+    @role_required("STUDENT")
+    def get(self, query):
+        return _run(
+            service.get_my_payments,
+            get_jwt_identity(),
+            page=query["page"],
+            per_page=query["per_page"],
+            invoice_id=query.get("invoice_id"),
+        )
+
+
+@blp.route("/payments/<uuid:payment_id>/receipt")
+class FeePaymentReceiptResource(MethodView):
+    @blp.doc(
+        summary="Download a payment receipt PDF",
+        description=(
+            "Redirects to a short-lived private receipt URL after checking "
+            "student ownership."
+        ),
+        security=[{"bearerAuth": []}],
+        responses={302: {"description": "Redirect to the private receipt PDF."}},
+    )
+    @role_required("ADMIN", "STUDENT")
+    def get(self, payment_id):
+        url = _run(
+            service.get_payment_receipt_url,
+            payment_id,
+            get_jwt_identity(),
+            _invoice_actor_role(),
+        )
+        response = redirect(url, code=302)
+        response.headers["Cache-Control"] = "no-store"
+        return response

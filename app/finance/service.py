@@ -12,6 +12,7 @@ from app.finance.models import (
     FeeAdjustment,
     FeeInvoice,
     FeeInvoiceLine,
+    FeePayment,
     FeeStructure,
     FeeStructureItem,
     StudentFeeCharge,
@@ -19,20 +20,26 @@ from app.finance.models import (
 from app.finance.repository import (
     get_fee_charge_by_id,
     get_invoice_by_id,
+    get_payment_by_id,
     get_fee_structure_by_id,
     has_active_invoice_line,
     get_next_version,
     has_active_fee_structure,
     list_invoices,
+    list_payments,
     list_fee_charges,
     list_fee_structures,
 )
 from app.finance.pdf import generate_invoice_pdf
+from app.finance.receipt_pdf import generate_payment_receipt_pdf
 from app.finance.storage import (
-    InvoiceStorageError,
+    FinanceStorageError,
+    create_receipt_pdf_url,
     create_invoice_pdf_url,
     delete_invoice_pdf,
+    delete_receipt_pdf,
     store_invoice_pdf,
+    store_receipt_pdf,
 )
 from app.models.academic_year import AcademicYear
 from app.models.course_offering import CourseOffering
@@ -87,6 +94,22 @@ class FeeInvoiceStorageUnavailableError(FinanceModuleError):
 
 class FeeInvoiceValidationError(FinanceModuleError):
     status_code = 422
+
+
+class FeePaymentNotFoundError(FinanceModuleError):
+    status_code = 404
+
+
+class FeePaymentConflictError(FinanceModuleError):
+    status_code = 409
+
+
+class FeePaymentAccessDeniedError(FinanceModuleError):
+    status_code = 403
+
+
+class FeePaymentStorageUnavailableError(FinanceModuleError):
+    status_code = 503
 
 
 def _commit_fee_structure(conflict_message):
@@ -608,7 +631,7 @@ def create_invoice(data, actor_user_id):
         store_invoice_pdf(invoice.pdf_object_key, pdf_buffer.getvalue())
         object_stored = True
         db.session.commit()
-    except InvoiceStorageError as exc:
+    except FinanceStorageError as exc:
         db.session.rollback()
         raise FeeInvoiceStorageUnavailableError(str(exc)) from exc
     except IntegrityError as exc:
@@ -629,7 +652,7 @@ def create_invoice(data, actor_user_id):
 def _delete_invoice_object_after_failure(object_key):
     try:
         delete_invoice_pdf(object_key)
-    except InvoiceStorageError:
+    except FinanceStorageError:
         current_app.logger.exception(
             "Could not remove invoice PDF object %s after a database failure.",
             object_key,
@@ -707,8 +730,146 @@ def get_invoice_pdf_url(invoice_id, user_id, role):
             invoice.pdf_object_key,
             filename,
         )
-    except InvoiceStorageError as exc:
+    except FinanceStorageError as exc:
         raise FeeInvoiceStorageUnavailableError(str(exc)) from exc
+
+
+def create_payment(invoice_id, data, actor_user_id):
+    invoice = get_invoice_by_id(invoice_id, for_update=True)
+    if invoice is None:
+        raise FeeInvoiceNotFoundError("Invoice not found.")
+    if invoice.status != "ISSUED":
+        raise FeePaymentConflictError(
+            "Payments can be recorded only for ISSUED invoices."
+        )
+
+    amount = Decimal(str(data["amount"]))
+    if amount <= 0:
+        raise FeeInvoiceValidationError("Payment amount must be positive.")
+    outstanding = invoice.balance_due
+    if amount > outstanding:
+        raise FeePaymentConflictError(
+            "Payment amount exceeds the invoice's outstanding balance."
+        )
+
+    payment_id = uuid4()
+    received_at = datetime.now(UTC)
+    amount_paid_after = invoice.amount_paid + amount
+    balance_after = invoice.total_amount - amount_paid_after
+    receipt_number = (
+        f"RCP-{received_at:%Y%m%d}-{payment_id.hex[:12].upper()}"
+    )
+    pdf_object_key = f"finance/receipts/{payment_id}.pdf"
+    payment_reference = data.get("payment_reference")
+    payment = FeePayment(
+        id=payment_id,
+        invoice=invoice,
+        receipt_number=receipt_number,
+        amount=amount,
+        amount_paid_after=amount_paid_after,
+        balance_after=balance_after,
+        payment_method=data["payment_method"].strip().upper(),
+        payment_reference=(
+            payment_reference.strip() if payment_reference else None
+        ),
+        received_at=received_at,
+        recorded_by=UUID(str(actor_user_id)),
+        pdf_object_key=pdf_object_key,
+    )
+    db.session.add(payment)
+    object_stored = False
+    try:
+        db.session.flush()
+        receipt_buffer = generate_payment_receipt_pdf(payment)
+        store_receipt_pdf(pdf_object_key, receipt_buffer.getvalue())
+        object_stored = True
+        db.session.commit()
+    except FinanceStorageError as exc:
+        db.session.rollback()
+        raise FeePaymentStorageUnavailableError(str(exc)) from exc
+    except IntegrityError as exc:
+        db.session.rollback()
+        if object_stored:
+            _delete_receipt_object_after_failure(pdf_object_key)
+        raise FeePaymentConflictError(
+            "The payment could not be recorded. Refresh and retry."
+        ) from exc
+    except Exception:
+        db.session.rollback()
+        if object_stored:
+            _delete_receipt_object_after_failure(pdf_object_key)
+        raise
+    return get_payment_by_id(payment.id)
+
+
+def _delete_receipt_object_after_failure(object_key):
+    try:
+        delete_receipt_pdf(object_key)
+    except FinanceStorageError:
+        current_app.logger.exception(
+            "Could not remove receipt PDF object %s after a database failure.",
+            object_key,
+        )
+
+
+def get_payments(
+    page=1,
+    per_page=20,
+    student_id=None,
+    invoice_id=None,
+    payment_method=None,
+):
+    return list_payments(
+        page=page,
+        per_page=per_page,
+        student_id=student_id,
+        invoice_id=invoice_id,
+        payment_method=payment_method,
+    )
+
+
+def get_my_payments(user_id, page=1, per_page=20, invoice_id=None):
+    student = db.session.scalar(
+        select(Student).where(Student.user_id == UUID(str(user_id)))
+    )
+    if student is None:
+        raise FeePaymentNotFoundError("Student profile not found.")
+    return get_payments(
+        page=page,
+        per_page=per_page,
+        student_id=student.id,
+        invoice_id=invoice_id,
+    )
+
+
+def get_invoice_payments_for_user(invoice_id, user_id, role, page=1, per_page=20):
+    invoice = get_invoice_for_user(invoice_id, user_id, role)
+    return get_payments(
+        page=page,
+        per_page=per_page,
+        invoice_id=invoice.id,
+    )
+
+
+def get_payment_receipt_url(payment_id, user_id, role):
+    payment = get_payment_by_id(payment_id)
+    if payment is None:
+        raise FeePaymentNotFoundError("Payment not found.")
+    if role != "ADMIN":
+        student = db.session.scalar(
+            select(Student).where(Student.user_id == UUID(str(user_id)))
+        )
+        if student is None:
+            raise FeePaymentNotFoundError("Student profile not found.")
+        if payment.invoice.student_id != student.id:
+            raise FeePaymentAccessDeniedError(
+                "You can access only your own payment receipts."
+            )
+    filename = f"{payment.receipt_number}.pdf"
+    try:
+        return create_receipt_pdf_url(payment.pdf_object_key, filename)
+    except FinanceStorageError as exc:
+        raise FeePaymentStorageUnavailableError(str(exc)) from exc
 
 
 def void_invoice(invoice_id, actor_user_id, reason):
@@ -717,6 +878,10 @@ def void_invoice(invoice_id, actor_user_id, reason):
         raise FeeInvoiceNotFoundError("Invoice not found.")
     if invoice.status == "VOID":
         return invoice
+    if invoice.payments:
+        raise FeeInvoiceConflictError(
+            "Invoices with recorded payments cannot be voided."
+        )
     invoice.status = "VOID"
     invoice.voided_at = datetime.now(UTC)
     invoice.voided_by = UUID(str(actor_user_id))

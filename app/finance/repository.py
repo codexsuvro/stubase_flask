@@ -5,6 +5,7 @@ from app.extensions import db
 from app.finance.models import (
     FeeInvoice,
     FeeInvoiceLine,
+    FeePayment,
     FeeStructure,
     StudentFeeCharge,
 )
@@ -248,3 +249,57 @@ def has_active_invoice_line(charge_id):
             FeeInvoiceLine.status == "ACTIVE",
         )
     ) is not None
+
+
+def get_payment_by_id(payment_id):
+    return db.session.scalar(
+        select(FeePayment).where(FeePayment.id == payment_id)
+    )
+
+
+def list_payments(
+    page=1,
+    per_page=20,
+    student_id=None,
+    invoice_id=None,
+    payment_method=None,
+):
+    statement = select(FeePayment).join(FeeInvoice)
+    if student_id is not None:
+        statement = statement.where(FeeInvoice.student_id == student_id)
+    if invoice_id is not None:
+        statement = statement.where(FeePayment.invoice_id == invoice_id)
+    if payment_method is not None:
+        statement = statement.where(
+            FeePayment.payment_method == payment_method
+        )
+
+    total_records = db.session.scalar(
+        select(func.count()).select_from(
+            statement.order_by(None).subquery()
+        )
+    ) or 0
+    items = db.session.scalars(
+        statement.order_by(
+            FeePayment.received_at.desc(),
+            FeePayment.id.desc(),
+        )
+        .limit(per_page)
+        .offset((page - 1) * per_page)
+    ).all()
+    total_pages = (
+        (total_records + per_page - 1) // per_page
+        if total_records
+        else 0
+    )
+    return {
+        "items": items,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total_records": total_records,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_previous": page > 1,
+        },
+    }

@@ -481,8 +481,8 @@ amount, applied credits, and amount due at issue time. Active invoices prevent
 their charges from being voided or having adjustments changed; void the
 invoice first to reopen those operations. Voided invoices and their private
 PDFs remain available for audit. Students can access only their own invoices.
-Payment recording and payment receipts are intentionally part of the upcoming
-payments workflow, so an invoice is not represented as a payment receipt.
+An invoice is a bill, not proof of payment; payment confirmation is recorded
+separately as a receipt.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -492,6 +492,26 @@ payments workflow, so an invoice is not represented as a payment receipt.
 | GET | `/finance/invoices/{invoice_id}` | Get an invoice, with owner checks |
 | GET | `/finance/invoices/{invoice_id}/pdf` | Download the private invoice PDF |
 | POST | `/finance/invoices/{invoice_id}/void` | Void an invoice with an audit reason |
+
+### Finance: Manual Payments and Receipts
+
+Administrators record offline payments against issued invoices; this module
+does not initiate or verify payments with a gateway. Partial payments are
+allowed, overpayments are rejected, and paid/outstanding balances are derived
+from the payment ledger. Each recorded payment creates an immutable receipt
+snapshot and a private PDF under the existing R2 bucket's
+`finance/receipts/` object-key prefix. Students can view their own payment
+history and download their receipts. Invoices with recorded payments cannot
+be voided. Razorpay, refunds/reversals, dues, and late fees remain separate
+future work.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/finance/invoices/{invoice_id}/payments` | Admin records a payment and generates its receipt |
+| GET | `/finance/invoices/{invoice_id}/payments` | Admin or owning student lists invoice payments |
+| GET | `/finance/payments` | Admin lists payments with filters |
+| GET | `/finance/payments/me` | Student lists their own payments |
+| GET | `/finance/payments/{payment_id}/receipt` | Admin or owning student downloads the private receipt PDF |
 
 ### Scholarships and Concessions
 
@@ -736,7 +756,8 @@ StuBase is actively under development. The following table reflects the current 
 | Versioned fee structures and student charge snapshots | Implemented |
 | Scholarship applications, awards, and auditable concessions | Implemented |
 | Immutable invoice snapshots and private invoice PDFs | Implemented |
-| Payment recording and receipts, dues, and financial reports | Pending |
+| Manual payment recording and receipt PDFs | Implemented |
+| Dues, late fees, and financial reports | Pending |
 | Advanced analytics, at-risk insights, and ML prediction | Pending |
 | Docker, background jobs, health checks, and production infrastructure | Pending |
 | Automated test suite | Planned after feature development |
@@ -768,7 +789,10 @@ The project emphasizes practical software engineering principles:
 
 Remaining work is planned in these phases:
 
-1. Institutional operations: payment recording and receipts, dues and late fees, and financial reports. Fee structures, scholarships, concessions, and invoice PDFs are implemented. Notifications and announcements are implemented.
+1. Institutional operations: dues and late fees, then financial reports. Fee
+   structures, scholarships, concessions, invoices, manual payments, and
+   receipt PDFs are implemented. Payment gateways remain later work.
+   Notifications and announcements are implemented.
 2. Analytics: dashboard KPI extensions, exports, at-risk analysis, and dropout-risk prediction.
 3. Production infrastructure: Docker, Redis/Celery, health checks, caching, rate limiting, and environment configuration.
 4. Engineering quality and delivery: automated tests after feature development, CI/CD, observability, load testing, and deployment.

@@ -1,7 +1,10 @@
+from decimal import Decimal, InvalidOperation
+
 from marshmallow import (
     Schema,
     ValidationError,
     fields,
+    pre_load,
     validate,
     validates,
     validates_schema,
@@ -295,6 +298,7 @@ class FeeChargeApplyResponseSchema(Schema):
 
 
 INVOICE_STATUSES = ("ISSUED", "VOID")
+PAYMENT_METHODS = ("CASH", "BANK_TRANSFER", "CHEQUE", "OTHER")
 
 
 class FeeInvoiceCreateSchema(Schema):
@@ -360,6 +364,9 @@ class FeeInvoiceResponseSchema(Schema):
     semester_id = fields.UUID(dump_only=True)
     currency_code = fields.String(dump_only=True)
     total_amount = fields.Decimal(as_string=True, dump_only=True)
+    amount_paid = fields.Decimal(as_string=True, dump_only=True)
+    balance_due = fields.Decimal(as_string=True, dump_only=True)
+    payment_status = fields.String(dump_only=True)
     issued_at = fields.DateTime(dump_only=True)
     issued_by = fields.UUID(dump_only=True)
     due_date = fields.Date(allow_none=True, dump_only=True)
@@ -397,3 +404,97 @@ class FeeInvoiceVoidSchema(Schema):
         del _kwargs
         if not value.strip():
             raise ValidationError("Reason cannot contain only whitespace.")
+
+
+class FeePaymentCreateSchema(Schema):
+    amount = fields.Decimal(
+        required=True,
+        as_string=True,
+        places=2,
+        allow_nan=False,
+        validate=validate.Range(min=Decimal("0.01")),
+    )
+    payment_method = fields.String(
+        required=True,
+        validate=validate.OneOf(PAYMENT_METHODS),
+    )
+    payment_reference = fields.String(
+        allow_none=True,
+        validate=validate.Length(max=100),
+    )
+
+    @pre_load
+    def validate_amount_precision(self, data, **_kwargs):
+        del _kwargs
+        if not isinstance(data, dict) or data.get("amount") is None:
+            return data
+        try:
+            amount = Decimal(str(data["amount"]))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError(
+                {"amount": ["Enter a valid decimal amount."]}
+            ) from exc
+        if not amount.is_finite():
+            raise ValidationError(
+                {"amount": ["Payment amount must be finite."]}
+            )
+        if amount.normalize().as_tuple().exponent < -2:
+            raise ValidationError(
+                {"amount": ["Payment amount supports at most two decimals."]}
+            )
+        return data
+
+
+class FeePaymentQuerySchema(Schema):
+    page = fields.Integer(load_default=1, validate=validate.Range(min=1))
+    per_page = fields.Integer(
+        load_default=20,
+        validate=validate.Range(min=1, max=100),
+    )
+    student_id = fields.UUID()
+    invoice_id = fields.UUID()
+    payment_method = fields.String(validate=validate.OneOf(PAYMENT_METHODS))
+
+
+class FeeInvoicePaymentQuerySchema(Schema):
+    page = fields.Integer(load_default=1, validate=validate.Range(min=1))
+    per_page = fields.Integer(
+        load_default=20,
+        validate=validate.Range(min=1, max=100),
+    )
+
+
+class MyFeePaymentQuerySchema(Schema):
+    page = fields.Integer(load_default=1, validate=validate.Range(min=1))
+    per_page = fields.Integer(
+        load_default=20,
+        validate=validate.Range(min=1, max=100),
+    )
+    invoice_id = fields.UUID()
+
+
+class FeePaymentResponseSchema(Schema):
+    id = fields.UUID(dump_only=True)
+    invoice_id = fields.UUID(dump_only=True)
+    receipt_number = fields.String(dump_only=True)
+    amount = fields.Decimal(as_string=True, dump_only=True)
+    currency_code = fields.String(dump_only=True)
+    amount_paid_after = fields.Decimal(as_string=True, dump_only=True)
+    balance_after = fields.Decimal(as_string=True, dump_only=True)
+    payment_method = fields.String(dump_only=True)
+    payment_reference = fields.String(allow_none=True, dump_only=True)
+    received_at = fields.DateTime(dump_only=True)
+    recorded_by = fields.UUID(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+
+
+class FeePaymentPaginatedResponseSchema(Schema):
+    items = fields.List(
+        fields.Nested(FeePaymentResponseSchema),
+        dump_only=True,
+    )
+    pagination = fields.Nested(
+        FeeChargePaginationSchema,
+        dump_only=True,
+    )
