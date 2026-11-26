@@ -678,6 +678,38 @@ class FeeInvoice(UUIDMixin, BaseModel):
         lazy="selectin",
         order_by="FeeInvoiceLine.created_at",
     )
+    payments = db.relationship(
+        "FeePayment",
+        back_populates="invoice",
+        lazy="selectin",
+        order_by="FeePayment.received_at",
+    )
+
+    @property
+    def amount_paid(self):
+        return sum(
+            (payment.amount for payment in self.payments),
+            Decimal("0.00"),
+        )
+
+    @property
+    def balance_due(self):
+        if self.status == "VOID":
+            return Decimal("0.00")
+        return max(
+            self.total_amount - self.amount_paid,
+            Decimal("0.00"),
+        )
+
+    @property
+    def payment_status(self):
+        if self.status == "VOID":
+            return "VOID"
+        if self.amount_paid == 0:
+            return "UNPAID"
+        if self.amount_paid >= self.total_amount:
+            return "PAID"
+        return "PARTIALLY_PAID"
 
 
 class FeeInvoiceLine(UUIDMixin, BaseModel):
@@ -745,3 +777,61 @@ class FeeInvoiceLine(UUIDMixin, BaseModel):
         lazy="selectin",
     )
     charge = db.relationship("StudentFeeCharge", lazy="selectin")
+
+
+class FeePayment(UUIDMixin, BaseModel):
+    __tablename__ = "fee_payments"
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "amount > 0",
+            name="ck_fee_payment_amount",
+        ),
+        db.CheckConstraint(
+            "payment_method IN ('CASH', 'BANK_TRANSFER', 'CHEQUE', 'OTHER')",
+            name="ck_fee_payment_method",
+        ),
+        db.CheckConstraint(
+            "length(trim(receipt_number)) > 0",
+            name="ck_fee_payment_receipt_number_nonblank",
+        ),
+        db.CheckConstraint(
+            "amount_paid_after >= amount AND balance_after >= 0",
+            name="ck_fee_payment_balance_snapshot",
+        ),
+        db.Index(
+            "ix_fee_payment_invoice_received",
+            "invoice_id",
+            "received_at",
+        ),
+    )
+
+    invoice_id = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("fee_invoices.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    receipt_number = db.Column(db.String(48), nullable=False, unique=True)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    amount_paid_after = db.Column(db.Numeric(14, 2), nullable=False)
+    balance_after = db.Column(db.Numeric(14, 2), nullable=False)
+    payment_method = db.Column(db.String(20), nullable=False)
+    payment_reference = db.Column(db.String(100), nullable=True)
+    received_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    recorded_by = db.Column(
+        db.UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    pdf_object_key = db.Column(db.String(500), nullable=False, unique=True)
+
+    invoice = db.relationship(
+        "FeeInvoice",
+        back_populates="payments",
+        lazy="selectin",
+    )
+    recorder = db.relationship("User", lazy="selectin")
+
+    @property
+    def currency_code(self):
+        return self.invoice.currency_code
